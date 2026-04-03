@@ -39,7 +39,8 @@ function params = init_parameters()
     params.M = 60;
     params.N = 60;
 
-    params.phi_options = deg2rad(0:4:40);
+    % % % params.phi_options = deg2rad(0:4:40);
+    params.phi_options = deg2rad(0:4:4);
     params.nPhasesPerEMS = numel(params.phi_options);
 
     %% --------------------------------------------------------------------

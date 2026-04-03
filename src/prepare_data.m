@@ -8,8 +8,8 @@ function state = prepare_data(Data, params)
 %   - organizes data into a consistent state structure
 %
 % IMPORTANT:
-%   Dataset field names may still use "RIS" (legacy naming),
-%   but internally we use "EMS" to match the paper terminology.
+%   The dataset .mat file uses legacy field names (H_I_RIS1, H_o_RIS1, etc.).
+%   Internally all variables use "EMS" to match the paper terminology.
 %
 % Outputs:
 %   state struct containing:
@@ -38,10 +38,11 @@ function state = prepare_data(Data, params)
     state.R_xy = Data.R_xy(idxUsers,:);
 
     %% --------------------------------------------------------------------
-    % EMS CHANNEL COMPONENTS (formerly "RIS")
+    % EMS CHANNEL COMPONENTS
     % ---------------------------------------------------------------------
     % NOTE:
-    % Dataset still uses "RIS" naming → we map to EMS internally.
+    % The dataset field names use legacy notation (H_I_RIS1, H_o_RIS1, etc.).
+    % We map them to EMS naming here and nowhere else in the codebase.
 
     % EMS 1
     state.H_i_EMS1 = Data.H_I_RIS1(idxUsers,:,:);   % incident
