@@ -1,4 +1,4 @@
-function [CTn, TWn, ERR, gainVec, dvec_dB] = evaluate_channel_configuration( ...
+function [CTn, TWn, ERR, gainVec, dvec_dB, xy] = evaluate_channel_configuration( ...
         Htot, R_xy, supervised_Len, ArrSize, Nreal, dissimFn, ...
         tsne_perplexity, K_fraction)
 % EVALUATE_CHANNEL_CONFIGURATION
@@ -30,6 +30,8 @@ function [CTn, TWn, ERR, gainVec, dvec_dB] = evaluate_channel_configuration( ...
 %   gainVec  : [Len x 1]  channel gain per user [dB], 10*log10(trace(H*H'))
 %   dvec_dB  : [N_pairs x 1]  upper-triangular pairwise dissimilarity [dB],
 %              i.e. 10*log10(D_ij) for all i < j
+%   xy       : [Len x 2]     full 2-D t-SNE embedding for ALL users
+%              (optional 6th output — needed e.g. for trajectory plotting)
 %
 % Convention note:
 %   CTn and TWn are returned NEGATED (sign matches CTnegCell / TWnegCell

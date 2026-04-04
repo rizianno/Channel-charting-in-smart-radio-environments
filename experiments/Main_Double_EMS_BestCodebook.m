@@ -63,6 +63,16 @@ N_real   = params.N_real;
 M        = params.M;
 N        = params.N;
 
+% --- Best-codeword selection -------------------------------------------
+%     BEST_AGG controls which aggregation is used to highlight the "best"
+%     codeword in the CDF figures AND to populate bestIdxStruct (used by
+%     Main_DoubleEMS_Trajectory to auto-select a codebook).
+%       'mean'   — mean of the per-user metric vector
+%       'median' — median
+%       'pX'     — bestPercentile-th percentile  (set below)
+BEST_AGG       = 'pX';   % 'mean' | 'median' | 'pX'
+bestPercentile = 90;     % only used when BEST_AGG = 'pX'
+
 % --- Codebook  (phi_options = deg2rad(0:4:40), 11 x 11 = 121 entries) ---
 codebook     = generate_codebook(params);
 nCodes       = codebook.nCodebooks;
@@ -213,18 +223,56 @@ fprintf('CDFs computed.\n\n');
 
 %% ========================================================================
 %% SECTION 5 — BEST & SPECULAR CODEWORD INDICES
+%%   All three aggregation methods are computed and stored.
+%%   BEST_AGG (Section 1) selects which one is highlighted in the figures.
+%%   CT/TW: negated, so HIGHER (closer to 0) = better  →  maximize
+%%   ER:    raw error, so LOWER                = better  →  minimize
 %% ========================================================================
 
-% 90th-percentile helper: first x value where CDF >= p
-pctVal = @(cdfRow, xVals, p) xVals(find(cdfRow >= p, 1, 'first'));
+% --- Compute aggregate vectors (one value per codeword) -----------------
+CT_mean_vec   = cellfun(@mean,   CTnegCell);
+TW_mean_vec   = cellfun(@mean,   TWnegCell);
+ER_mean_vec   = cellfun(@mean,   ERRcell);
 
-CT90 = arrayfun(@(i) pctVal(cdf_CT(i,:), x_CT, 0.9), 1:nCodes);
-TW90 = arrayfun(@(i) pctVal(cdf_TW(i,:), x_TW, 0.9), 1:nCodes);
-ER90 = arrayfun(@(i) pctVal(cdf_ER(i,:), x_ER, 0.9), 1:nCodes);
+CT_median_vec = cellfun(@median, CTnegCell);
+TW_median_vec = cellfun(@median, TWnegCell);
+ER_median_vec = cellfun(@median, ERRcell);
 
-[~, bestIdx_CT] = min(CT90);
-[~, bestIdx_TW] = min(TW90);
-[~, bestIdx_ER] = min(ER90);
+pctFn         = @(v) prctile(v, bestPercentile);
+CT_pX_vec     = cellfun(pctFn,   CTnegCell);
+TW_pX_vec     = cellfun(pctFn,   TWnegCell);
+ER_pX_vec     = cellfun(pctFn,   ERRcell);
+
+% --- Best index per aggregation -----------------------------------------
+[~, bestIdx_CT_mean]   = max(CT_mean_vec);
+[~, bestIdx_TW_mean]   = max(TW_mean_vec);
+[~, bestIdx_ER_mean]   = min(ER_mean_vec);
+
+[~, bestIdx_CT_median] = max(CT_median_vec);
+[~, bestIdx_TW_median] = max(TW_median_vec);
+[~, bestIdx_ER_median] = min(ER_median_vec);
+
+[~, bestIdx_CT_pX]     = max(CT_pX_vec);
+[~, bestIdx_TW_pX]     = max(TW_pX_vec);
+[~, bestIdx_ER_pX]     = min(ER_pX_vec);
+
+% --- Select indices for figure highlighting (driven by BEST_AGG) --------
+switch BEST_AGG
+    case 'mean'
+        bestIdx_CT = bestIdx_CT_mean;
+        bestIdx_TW = bestIdx_TW_mean;
+        bestIdx_ER = bestIdx_ER_mean;
+    case 'median'
+        bestIdx_CT = bestIdx_CT_median;
+        bestIdx_TW = bestIdx_TW_median;
+        bestIdx_ER = bestIdx_ER_median;
+    case 'pX'
+        bestIdx_CT = bestIdx_CT_pX;
+        bestIdx_TW = bestIdx_TW_pX;
+        bestIdx_ER = bestIdx_ER_pX;
+    otherwise
+        error('Unknown BEST_AGG: %s. Use ''mean'', ''median'', or ''pX''.', BEST_AGG);
+end
 
 % Specular codeword: phi1=0, phi2=0 — always index 1 with the shared codebook
 specIdx = 1;
@@ -234,8 +282,8 @@ fMin_CT = min(cdf_CT);  fMax_CT = max(cdf_CT);
 fMin_TW = min(cdf_TW);  fMax_TW = max(cdf_TW);
 fMin_ER = min(cdf_ER);  fMax_ER = max(cdf_ER);
 
-fprintf('Best codeword indices:  CT=%d  TW=%d  ER=%d\n\n', ...
-        bestIdx_CT, bestIdx_TW, bestIdx_ER);
+fprintf('Best codeword indices (%s, p=%d):  CT=%d  TW=%d  ER=%d\n\n', ...
+        BEST_AGG, bestPercentile, bestIdx_CT, bestIdx_TW, bestIdx_ER);
 
 %% ========================================================================
 %% SECTION 6 — FIGURE GENERATION
@@ -259,10 +307,18 @@ plotFn(x_ER, cdf_ER, cdf_ER_dir, fMin_ER, fMax_ER, ...
 
 %% ========================================================================
 %% SECTION 7 — SAVE BEST-INDEX STRUCT  (lightweight append)
+%%   All aggregation variants are stored so Main_DoubleEMS_Trajectory can
+%%   load any combination without rerunning this script.
+%%   codebook_all is also appended so the trajectory main can look up the
+%%   phase values (phi1, phi2) for any chosen index.
 %% ========================================================================
-bestIdxStruct = struct('bestCT', bestIdx_CT, 'bestTW', bestIdx_TW, ...
-                       'bestER', bestIdx_ER);
-save(dataFile, 'bestIdxStruct', '-append');
+bestIdxStruct = struct( ...
+    'CT_mean',    bestIdx_CT_mean,   'TW_mean',    bestIdx_TW_mean,   'ER_mean',    bestIdx_ER_mean,   ...
+    'CT_median',  bestIdx_CT_median, 'TW_median',  bestIdx_TW_median, 'ER_median',  bestIdx_ER_median, ...
+    'CT_pX',      bestIdx_CT_pX,     'TW_pX',      bestIdx_TW_pX,     'ER_pX',      bestIdx_ER_pX,     ...
+    'percentile', bestPercentile,    'agg_used',   BEST_AGG);
+
+save(dataFile, 'bestIdxStruct', 'codebook_all', '-append');
 
 fprintf('Figures saved to:\n  %s\n\n', figFolder);
 fprintf('=== Done ===\n');
