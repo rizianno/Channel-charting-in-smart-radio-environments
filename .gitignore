@@ -1,2 +1,8 @@
 .DS_Store
 *.mat
+
+# Claude Code local settings
+.claude/
+
+# Python virtual environment
+env_tensorflow_ae/
