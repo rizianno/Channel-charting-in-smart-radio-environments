@@ -10,7 +10,7 @@ function metrics = compute_all_metrics(results_global, results_local, best, stat
     Len = state.Len;
 
     KK = 0.05 * Len;
-    DistT = squareform(pdist(state.R_xy));
+    DistT = squareform(pdist(state.Y));
 
     %% GLOBAL
     DistZ_global = squareform(pdist(results_global.xy));

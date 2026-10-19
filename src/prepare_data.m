@@ -25,6 +25,26 @@ function state = prepare_data(Data, params)
     % USER SUBSAMPLING
     % ---------------------------------------------------------------------
     idxUsers = 1:params.Total_samples_used;
+
+    % AoA target: the azimuth is only defined for users in front of BOTH
+    % surfaces (a surface cannot serve a user behind its wall).
+    isAoA = isfield(params,'target') && strcmpi(params.target,'aoa');
+    if isAoA
+        emsPos = [Data.RIS1_position; Data.RIS2_position];
+        [az_all, front_all] = compute_ems_azimuth( ...
+            Data.R_xy(idxUsers,:), emsPos, params);
+        keep = all(front_all,2);
+        idxUsers = idxUsers(keep);
+        az_all   = az_all(keep,:);
+        if isfield(params,'max_users') && ~isempty(params.max_users)
+            nKeep    = min(numel(idxUsers), params.max_users);
+            idxUsers = idxUsers(1:nKeep);
+            az_all   = az_all(1:nKeep,:);
+        end
+        state.EMS_position = emsPos;
+        state.BS_position  = Data.BS_position;
+    end
+
     state.Len = length(idxUsers);
 
     %% --------------------------------------------------------------------
@@ -36,6 +56,16 @@ function state = prepare_data(Data, params)
     % USER POSITIONS (GROUND TRUTH)
     % ---------------------------------------------------------------------
     state.R_xy = Data.R_xy(idxUsers,:);
+
+    %% --------------------------------------------------------------------
+    % CHART TARGET (what t-SNE anchors and all errors refer to)
+    % ---------------------------------------------------------------------
+    if isAoA
+        state.AoA_deg = az_all;          % [Len x 2]: azimuth from EMS1, EMS2
+        state.Y       = state.AoA_deg;
+    else
+        state.Y       = state.R_xy;      % original behaviour
+    end
 
     %% --------------------------------------------------------------------
     % EMS CHANNEL COMPONENTS

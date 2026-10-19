@@ -1,0 +1,25 @@
+Run tag         : coarse_3x3
+Date            : 19-Oct-2026 15:48:33
+Code commit     : e575ea2-dirty
+branch aoa-estimation, synced 2026-10-19 17:44:12
+Users (AoA def.): 2033  (in front of both EMSs)
+Labeled anchors : 305 (15%), evaluated: 1728
+EMS sweeps      : 9  (phi per EMS [deg]: [0 20 40])
+Fusion weighting: TW (p90)
+Runtime         : 2.5 min
+
+Azimuth: angle of the UE seen from each EMS, 0 deg = surface normal,
+         positive toward +y (codebook-gradient axis); range (-90,90).
+Joint error: sqrt(dtheta1^2 + dtheta2^2) per user, unlabeled users only.
+best_codebook is an oracle (picked by its error on the evaluated users).
+anchor_mean_baseline: every user predicted at the mean labeled AoA.
+
+             <strong>method</strong>             <strong>joint_mean_deg</strong>    <strong>joint_median_deg</strong>    <strong>joint_p90_deg</strong>    <strong>EMS1_mean_deg</strong>    <strong>EMS1_median_deg</strong>    <strong>EMS1_p90_deg</strong>    <strong>EMS2_mean_deg</strong>    <strong>EMS2_median_deg</strong>    <strong>EMS2_p90_deg</strong>    <strong>TW_mean</strong>    <strong>CT_mean</strong>
+    <strong>________________________</strong>    <strong>______________</strong>    <strong>________________</strong>    <strong>_____________</strong>    <strong>_____________</strong>    <strong>_______________</strong>    <strong>____________</strong>    <strong>_____________</strong>    <strong>_______________</strong>    <strong>____________</strong>    <strong>_______</strong>    <strong>_______</strong>
+
+    {'best_codebook'       }        18.028             8.6159            35.768           11.581            5.1087             20.25          11.043            4.7034            21.141       0.90168    0.90261
+    {'global_fusion'       }        16.191             6.8677            35.835           10.219            3.9016             19.06          10.145             4.188            23.279       0.90979    0.90779
+    {'local_fusion'        }        14.602             6.7366            30.001           9.3688            3.7614            16.977          8.9107            4.0833            19.114       0.92541     0.9235
+    {'anchor_mean_baseline'}        72.204             78.013            94.579           46.019            47.032            74.813          50.333            50.358            82.222           NaN        NaN
+
+

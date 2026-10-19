@@ -18,7 +18,7 @@ function results = run_channel_charting(state, params, codebook)
 
     %% METRICS
     KK = params.K_fraction * Len;
-    DistT = squareform(pdist(state.R_xy));
+    DistT = squareform(pdist(state.Y));
 
     fprintf('\n=== PHASE 1: Channel Charting for Each Codebook ===\n');
 
@@ -39,17 +39,19 @@ function results = run_channel_charting(state, params, codebook)
         phase_profile1 = kron(phi1*(1:params.M), ones(1,params.N));
         phase_profile2 = kron(phi2*(1:params.M), ones(1,params.N));
 
-        Theta_EMS1 = diag(exp(-1j*phase_profile1));
-        Theta_EMS2 = diag(exp(-1j*phase_profile2));
+        % Diagonal of Theta_EMS = diag(exp(-1j*phase_profile)). Multiplying
+        % element-wise by this column is identical to H_o*Theta*H_i but
+        % avoids a 3600x3600 matrix product per user (speed-up only).
+        theta1 = exp(-1j*phase_profile1).';
+        theta2 = exp(-1j*phase_profile2).';
 
         % Channel construction
         H_EMS1 = zeros(Len, params.Par.Tx.ArrSize, size(state.H_i_EMS1,3));
         H_EMS2 = zeros(Len, params.Par.Tx.ArrSize, size(state.H_i_EMS2,3));
 
         for uu = 1:Len
-            % % % % disp(uu);
-            H_EMS1(uu,:,:) = state.H_o_EMS1 * Theta_EMS1 * squeeze(state.H_i_EMS1(uu,:,:));
-            H_EMS2(uu,:,:) = state.H_o_EMS2 * Theta_EMS2 * squeeze(state.H_i_EMS2(uu,:,:));
+            H_EMS1(uu,:,:) = state.H_o_EMS1 * (theta1 .* squeeze(state.H_i_EMS1(uu,:,:)));
+            H_EMS2(uu,:,:) = state.H_o_EMS2 * (theta2 .* squeeze(state.H_i_EMS2(uu,:,:)));
         end
 
         H_tot = state.H_dir + H_EMS1 + H_EMS2;
@@ -57,16 +59,15 @@ function results = run_channel_charting(state, params, codebook)
         % Covariance
         R_Cov = zeros(Len, params.Par.Tx.ArrSize, params.Par.Tx.ArrSize);
 
+        % Each realization is H*g with a scalar g = (randn+1j*randn)/sqrt(2),
+        % so sum_r (H g_r)(H g_r)' / N_real = H*H' * mean(|g_r|^2).
+        % randn(2,N_real) draws the same numbers in the same order as the
+        % original loop (real part, then imaginary part, per realization).
         for uu = 1:Len
-            H = squeeze(H_tot(uu,:,:));
-            C = zeros(params.Par.Tx.ArrSize);
-
-            for r = 1:params.N_real
-                Hs = H*(randn+1j*randn)/sqrt(2);
-                C  = C + Hs*Hs';
-            end
-
-            R_Cov(uu,:,:) = C / params.N_real;
+            H  = squeeze(H_tot(uu,:,:));
+            v  = randn(2, params.N_real);
+            g2 = mean((v(1,:).^2 + v(2,:).^2) / 2);
+            R_Cov(uu,:,:) = (H*H') * g2;
         end
 
         %% ======= EXACT ORIGINAL LOGIC ENDS HERE =======
@@ -75,14 +76,14 @@ function results = run_channel_charting(state, params, codebook)
         [D_mat, ~] = CompDismilarityLogEuclidean(R_Cov);
 
         % t-SNE
-        xy_tsne = tsne_sem(D_mat, state.R_xy, ...
+        xy_tsne = tsne_sem(D_mat, state.Y, ...
                            1:params.supervised_Len, ...
                            params.tsne_perplexity);
 
         results.PosEstimates(:,:,cb) = xy_tsne;
 
         % Error
-        err = sqrt(sum((xy_tsne - state.R_xy).^2,2));
+        err = sqrt(sum((xy_tsne - state.Y).^2,2));
         results.ErrorPerUser(:,cb) = err;
         results.ErrorPerCodebook(cb) = mean(err(params.supervised_Len+1:end));
 

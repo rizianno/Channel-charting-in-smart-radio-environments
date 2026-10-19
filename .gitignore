@@ -6,3 +6,6 @@
 
 # Python virtual environment
 env_tensorflow_ae/
+
+# AoA run logs
+logs/

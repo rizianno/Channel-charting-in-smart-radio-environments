@@ -7,7 +7,7 @@ function best = evaluate_best_codebook(results_phase1, state, params)
     best.xy = squeeze(results_phase1.PosEstimates(:,:,best.idx));
 
     % Compute error explicitly (for consistency with others)
-    err = sqrt(sum((best.xy - state.R_xy).^2,2));
+    err = sqrt(sum((best.xy - state.Y).^2,2));
     best.err = err(params.supervised_Len+1:end);
 
     fprintf('\nBest Single Codebook:\n');

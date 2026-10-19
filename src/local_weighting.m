@@ -58,12 +58,12 @@ function results_local = local_weighting(results_phase1, state, params)
 
     % Clamp labeled users
     xy_weighted(1:params.supervised_Len,:) = ...
-        state.R_xy(1:params.supervised_Len,:);
+        state.Y(1:params.supervised_Len,:);
 
     %% --------------------------------------------------------------------
     % ERROR EVALUATION
     % ---------------------------------------------------------------------
-    err = sqrt(sum((xy_weighted - state.R_xy).^2,2));
+    err = sqrt(sum((xy_weighted - state.Y).^2,2));
     err_unlabeled = err(params.supervised_Len+1:end);
 
     fprintf('\nLocal Weighted Results:\n');

@@ -34,6 +34,28 @@ function params = init_parameters()
     params.SCENARIO_AGGREGATION = 'p90';
 
     %% --------------------------------------------------------------------
+    % CHART TARGET
+    % ---------------------------------------------------------------------
+    % 'position' : original experiment, chart target = user (x,y) [m]
+    % 'aoa'      : chart target = azimuth of the UE seen from EMS1 and EMS2
+    %              [deg] (set by experiments/Main_AoA_Estimation.m)
+    params.target = 'position';
+
+    %% --------------------------------------------------------------------
+    % EMS GEOMETRY FOR AoA LABELS (used only when params.target = 'aoa')
+    % ---------------------------------------------------------------------
+    % Verified from the dataset's channel phases:
+    %   - both EMSs lie in walls perpendicular to x; the codebook phase
+    %     gradient (element index m) runs along +y, the other axis along z;
+    %   - EMS1 (x = -28.85) faces -x, EMS2 (x = -71.9) faces +x, i.e. both
+    %     face the street between them, where the BS also is;
+    %   - UE height 1.5 m (element spacing lambda/2).
+    % EMS positions themselves are read from the dataset.
+    params.UE_height  = 1.5;
+    params.EMS_normal = [-1 0 0;  1 0 0];   % outward normal of EMS1, EMS2
+    params.EMS_axis_m = [ 0 1 0;  0 1 0];   % codebook-gradient axis of EMS1, EMS2
+
+    %% --------------------------------------------------------------------
     % EMS CONFIGURATION
     % ---------------------------------------------------------------------
     params.M = 60;
