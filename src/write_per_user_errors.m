@@ -1,0 +1,16 @@
+function write_per_user_errors(geo, Y_true, Y_est, outFile)
+% WRITE_PER_USER_ERRORS  Light per-user CSV of the evaluated users (local fusion):
+%   x, y [m], true and estimated azimuth from EMS1/EMS2 [deg], joint error [deg].
+%   Lets aoa_error_map.m redraw the map anywhere, without the dataset.
+    E = Y_est - Y_true;
+    T = table(geo.R_xy(:,1), geo.R_xy(:,2), Y_true(:,1), Y_true(:,2), ...
+              Y_est(:,1), Y_est(:,2), sqrt(sum(E.^2,2)), ...
+              'VariableNames', {'x_m','y_m','az1_true_deg','az2_true_deg', ...
+                                'az1_est_deg','az2_est_deg','joint_err_deg'});
+    writetable(T, outFile);
+    % EMS / BS positions for the map markers
+    G = table([geo.EMS_position(:,1); geo.BS_position(1)], ...
+              [geo.EMS_position(:,2); geo.BS_position(2)], ...
+              'VariableNames', {'x_m','y_m'}, 'RowNames', {'EMS1','EMS2','BS'});
+    writetable(G, strrep(outFile, '.csv', '_geometry.csv'), 'WriteRowNames', true);
+end

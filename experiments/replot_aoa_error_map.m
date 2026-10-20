@@ -35,5 +35,8 @@ for k = 1:numel(tags)
                      'BS_position', state.BS_position);
     end
     plot_aoa_error_map(geo, S.err.local, fullfile(runDir,'aoa_error_map.png'), cmax);
+    unl = S.params.supervised_Len+1:size(S.Y,1);
+    write_per_user_errors(geo, S.Y(unl,:), S.est.local(unl,:), ...
+                          fullfile(runDir,'per_user_errors.csv'));
     fprintf('redrawn: %s\n', fullfile(runDir,'aoa_error_map.png'));
 end

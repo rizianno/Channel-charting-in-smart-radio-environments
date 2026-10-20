@@ -159,6 +159,8 @@ exportgraphics(f, fullfile(outDir,'aoa_true_vs_est.png'), 'Resolution',150); clo
 geo = struct('R_xy', state.R_xy(unl,:), 'EMS_position', state.EMS_position, ...
              'BS_position', state.BS_position);
 plot_aoa_error_map(geo, err.local, fullfile(outDir,'aoa_error_map.png'), 30);
+% light per-user CSV: lets aoa_error_map.m redraw it with any color range
+write_per_user_errors(geo, Y(unl,:), est.local(unl,:), fullfile(outDir,'per_user_errors.csv'));
 
 % 4) Error per codebook configuration
 f = figure('Position',[100 100 700 400]); hold on; grid on; box on;
