@@ -1,7 +1,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % REDRAW aoa_error_map.png OF FINISHED RUNS (no re-simulation)
 %   RUN_TAGS="coarse_3x3,full_11x11"  (default: every folder in results_aoa)
-%   AOA_MAP_CMAX="40"                 top of the color scale [deg]
+%   AOA_MAP_CMAX="30"                 top of the color scale [deg]
 % Uses results_aoa/<tag>/results.mat; runs saved before 'geo' was stored
 % get the user positions back from the dataset with the run's own params.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -12,7 +12,7 @@ root = fileparts(fileparts(mfilename('fullpath')));
 addpath(genpath(fullfile(root,'src')));
 
 cmax = str2double(getenv('AOA_MAP_CMAX'));
-if isnan(cmax), cmax = 40; end
+if isnan(cmax), cmax = 30; end
 
 tags = strtrim(strsplit(getenv('RUN_TAGS'), ','));
 if isempty(tags{1})

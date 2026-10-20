@@ -5,7 +5,7 @@ function plot_aoa_error_map(geo, err_deg, outFile, cmax)
 %   err_deg : [U x 1] joint AoA error of the same users [deg]
 %   outFile : PNG path
 %   cmax    : top of the color scale [deg]; larger errors take the top color
-    if nargin < 4, cmax = 40; end
+    if nargin < 4, cmax = 30; end
     f = figure('Position',[100 100 700 600]); hold on; grid on; box on; axis equal;
     scatter(geo.R_xy(:,1), geo.R_xy(:,2), 12, min(err_deg, cmax), 'filled');
     clim([0 cmax]);
