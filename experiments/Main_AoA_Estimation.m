@@ -155,15 +155,10 @@ end
 exportgraphics(f, fullfile(outDir,'aoa_true_vs_est.png'), 'Resolution',150); close(f);
 
 % 3) Where the errors are (local fusion), with EMS and BS positions
-f = figure('Position',[100 100 700 600]); hold on; grid on; box on; axis equal;
-scatter(state.R_xy(unl,1), state.R_xy(unl,2), 12, err.local, 'filled');
-cb_ = colorbar; ylabel(cb_, 'Joint AoA error [deg]');
-plot(state.EMS_position(:,1), state.EMS_position(:,2), 'ks', 'MarkerSize',10, 'MarkerFaceColor','y');
-plot(state.BS_position(1), state.BS_position(2), 'k^', 'MarkerSize',10, 'MarkerFaceColor','r');
-text(state.EMS_position(:,1), state.EMS_position(:,2)-3, {'EMS1','EMS2'}, 'HorizontalAlignment','center');
-text(state.BS_position(1), state.BS_position(2)+3, 'BS', 'HorizontalAlignment','center');
-xlabel('x [m]'); ylabel('y [m]'); title('Spatial distribution of the AoA error (local fusion)');
-exportgraphics(f, fullfile(outDir,'aoa_error_map.png'), 'Resolution',150); close(f);
+%    color scale 0-40 deg (larger errors saturate) so the typical errors are visible
+geo = struct('R_xy', state.R_xy(unl,:), 'EMS_position', state.EMS_position, ...
+             'BS_position', state.BS_position);
+plot_aoa_error_map(geo, err.local, fullfile(outDir,'aoa_error_map.png'), 40);
 
 % 4) Error per codebook configuration
 f = figure('Position',[100 100 700 400]); hold on; grid on; box on;
@@ -197,7 +192,7 @@ fprintf(fid, 'anchor_mean_baseline: every user predicted at the mean labeled AoA
 fprintf(fid, '%s\n', evalc('disp(T)'));
 fclose(fid);
 
-save(fullfile(outDir,'results.mat'), 'T','Tcb','est','err','Y','params', ...
+save(fullfile(outDir,'results.mat'), 'T','Tcb','est','err','Y','params','geo', ...
      'results_phase1','results_global','results_local','best','metrics','-v7.3');
 
 disp(T);
