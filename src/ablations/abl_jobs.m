@@ -4,7 +4,7 @@ function J = abl_jobs(scn, K, charts, cat, noiseName)
 % F1-F3: one job per (chart, K).
 %   .key, .chart, .feature, .direct, .phi [S x 2] configurations (deg),
 %   .off [S x 2] OFF acquisition for each configuration (F3), .group [S x 1] centring groups (F2)
-    lev = cat.levels{K};
+    lev = abl_levels(cat, scn, K);
     [p1, p2] = ndgrid(lev, lev);
     P = [p1(:) p2(:)];                    % S = K^2 configurations
     J = struct('key',{}, 'chart',{}, 'feature',{}, 'direct',{}, 'phi',{}, 'off',{}, 'group',{});
@@ -15,7 +15,8 @@ function J = abl_jobs(scn, K, charts, cat, noiseName)
                               abl_stkey(scn.direct, P(s,:))), c, 'F0', scn.direct, P(s,:)); %#ok<AGROW>
             end
         else
-            j = mk(sprintf('%s|%s|%s|d%d|K%d', noiseName, c.id, scn.feature, scn.direct, K), ...
+            cbk = '';  if isfield(scn,'codebook') && ~strcmp(scn.codebook,'narrow'), cbk = ['|' scn.codebook]; end
+            j = mk(sprintf('%s|%s|%s|d%d|K%d%s', noiseName, c.id, scn.feature, scn.direct, K, cbk), ...
                    c, scn.feature, scn.direct, P);
             if c.perEMS
                 e = c.cols;  o = 3 - e;

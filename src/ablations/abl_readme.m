@@ -21,22 +21,24 @@ function abl_readme(scn, CAT, noise, U, charts, allScn, outDir, T)
     L{end+1} = sprintf('- **Input feature (%s).** %s', scn.feature, ft.text);
     L{end+1} = sprintf('- **Direct path.** %s', dtxt{scn.direct+1});
     L{end+1} = sprintf('- **Noise (%s).** %s', noise.name, noise.text);
+    cbt = CAT.codebooks(strcmp({CAT.codebooks.id}, scn.codebook));
+    L{end+1} = sprintf('- **Codebook range (%s).** %s.', cbt.id, cbt.text);
     L{end+1} = '- **Unchanged everywhere:** dataset, surface geometry, t-SNE (`tsne_sem`, perplexity 150), Log-Euclidean distance, 15% supervision, fusion rule (where there is fusion).';
     L{end+1} = '';
-    L{end+1} = '| K | phase gradients per EMS [deg] | acquisitions |';
+    L{end+1} = '| K | phase steps per EMS [deg/element] | acquisitions |';
     L{end+1} = '|---|---|---|';
     for K = scn.Ks
         a = unique(T.acquisitions(T.K == K));
-        L{end+1} = sprintf('| %dx%d | %s | %d |', K, K, mat2str(round(CAT.levels{K},2)), a(1)); %#ok<AGROW>
+        L{end+1} = sprintf('| %dx%d | %s | %d |', K, K, mat2str(round(abl_levels(CAT, scn, K),2)), a(1)); %#ok<AGROW>
     end
     L{end+1} = '';
     L{end+1} = '## How it differs from the other scenarios';
-    ref = struct('structure','S1','feature','F0','direct',true);
+    ref = struct('structure','S1','feature','F0','direct',true,'codebook','narrow');
     d = diffs(scn, ref, CAT);
     if isempty(d)
-        L{end+1} = '- This **is the reference** (joint chart, users in front of both surfaces, per-sweep covariance + fusion, direct path on).';
+        L{end+1} = '- This **is the reference** (joint chart, users in front of both surfaces, per-sweep covariance + fusion, direct path on, narrow 0..40 deg codebook).';
     else
-        L{end+1} = sprintf('- **vs the reference** (S1 joint, F0 per-sweep covariance + fusion, direct on): %s.', strjoin(d, '; '));
+        L{end+1} = sprintf('- **vs the reference** (S1 joint, F0 per-sweep covariance + fusion, direct on, narrow codebook): %s.', strjoin(d, '; '));
     end
     L{end+1} = '- **Scenarios that differ in exactly one factor** (compare with these to isolate it):';
     for o = allScn
@@ -82,5 +84,10 @@ function d = diffs(a, b, CAT)
     if a.direct ~= b.direct
         onoff = {'off','on'};
         d{end+1} = sprintf('direct path %s instead of %s', onoff{a.direct+1}, onoff{b.direct+1});
+    end
+    if ~strcmp(a.codebook, b.codebook)
+        rng_ = struct('narrow','0..40 deg/element', 'wide','-180..180 deg/element');
+        d{end+1} = sprintf('%s codebook (%s) instead of %s (%s)', a.codebook, rng_.(a.codebook), ...
+                           b.codebook, rng_.(b.codebook));
     end
 end

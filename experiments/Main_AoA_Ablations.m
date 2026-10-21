@@ -8,6 +8,7 @@
 %                    F2 sweep changes | F3 OFF subtraction
 %   direct path    : on | off
 %   codebook size  : 1x1 ... 5x5 per scenario (trend vs number of acquisitions)
+%   codebook range : narrow (0..40 deg/element) | wide (-180..180 deg/element)
 %   noise          : noiseless | estimated channels with 0 / 30 / 60 dB pilot gain
 % Each t-SNE chart is computed once (F0 charts are shared by all codebook sizes) and cached in
 % cache_ablations/ (git-ignored); outputs go to results_aoa/ablations/.
@@ -20,6 +21,7 @@
 %   ABL_WORKERS   parallel workers (default 16)
 %   ABL_KS        restrict codebook sizes, e.g. "3" or "1,3"      (testing)
 %   ABL_SCENARIOS restrict scenarios by name substrings, e.g. "S1-joint,S2-perEMS"
+%   ABL_CODEBOOK  narrow | wide (default: both; charts already cached are not recomputed)
 %   ABL_MAX_USERS use only the first N dataset users               (testing)
 %   ABL_OUT       output root relative to the repo (default results_aoa/ablations)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -60,7 +62,7 @@ scns = CAT.scenarios;
 switch stage
     case 'calibration'
         noises = CAT.noise;
-        scns   = scns(strcmp({scns.structure},'S1') & strcmp({scns.feature},'F0') & [scns.direct]);
+        scns   = scns(strcmp({scns.structure},'S1') & strcmp({scns.feature},'F0') & [scns.direct] & strcmp({scns.codebook},'narrow'));
         scns.Ks = 3;
         stageDir = 'calibration';
     case 'matrix'
@@ -71,7 +73,7 @@ switch stage
         stageDir = envs('ABL_EVAL', 'calibration');
         if strcmp(stageDir,'calibration')
             noises = CAT.noise;
-            scns   = scns(strcmp({scns.structure},'S1') & strcmp({scns.feature},'F0') & [scns.direct]);
+            scns   = scns(strcmp({scns.structure},'S1') & strcmp({scns.feature},'F0') & [scns.direct] & strcmp({scns.codebook},'narrow'));
             scns.Ks = 3;
         else
             noises = CAT.noise(strcmp({CAT.noise.name}, stageDir));
@@ -85,6 +87,8 @@ if ~isempty(ks)
     for i = 1:numel(scns), scns(i).Ks = intersect(scns(i).Ks, kk); end
     scns = scns(arrayfun(@(s) ~isempty(s.Ks), scns));
 end
+cbf = envs('ABL_CODEBOOK', '');
+if ~isempty(cbf), scns = scns(strcmp({scns.codebook}, cbf)); end
 flt = envs('ABL_SCENARIOS', '');
 if ~isempty(flt)
     pats = strtrim(strsplit(flt, ','));
@@ -224,6 +228,7 @@ function write_index(outDir, stageDir, scns, noises, CAT, U, T, runtime)
     for s = CAT.structures, L{end+1} = sprintf('- **%s** (`%s`): %s', s.id, s.tok, s.text); end %#ok<AGROW>
     for f = CAT.features,   L{end+1} = sprintf('- **%s** (`%s`): %s', f.id, f.tok, f.text); end %#ok<AGROW>
     L{end+1} = '- **Direct path** `dir-on` / `dir-off` (ideal removal).';
+    for c = CAT.codebooks, L{end+1} = sprintf('- **Codebook range `%s`** (folder suffix `%s`): %s.', c.id, c.tok, c.text); end %#ok<AGROW>
     for n = noises, L{end+1} = sprintf('- **Noise `%s`**: %s', n.name, n.text); end %#ok<AGROW>
     L{end+1} = '';
     L{end+1} = '## Results at a glance (pooled EMS1+EMS2 median |error| [deg], subset `common`)';

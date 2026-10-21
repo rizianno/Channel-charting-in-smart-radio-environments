@@ -2,8 +2,18 @@ function cat = abl_catalog()
 % ABL_CATALOG  Factors of the AoA ablation study: codebook sizes, noise models, user/chart
 % structures, features, and the scenario list. The texts are used in the README files.
 
-    % Phase gradients per EMS for a K x K codebook [deg]; 3x3 = the reference coarse run.
-    cat.levels = {0, [0 40], [0 20 40], [0 40/3 80/3 40], [0 10 20 30 40]};
+    % Phase step between adjacent elements per EMS for a K x K codebook [deg/element].
+    % narrow: 0..40 (as all earlier runs; 3x3 = the reference coarse run) steers the beam only
+    %         within a ~16-28 deg sector on the side away from the BS.
+    % wide  : K steps spread evenly over -180..180, i.e. beams spread evenly in sin(theta) over
+    %         all directions (lambda/2 spacing: sin(theta_beam) = sin(theta_specular) + step/180).
+    wide = @(K) sort(mod((0:K-1)*360/K + 180, 360) - 180);
+    cat.codebooks = [ ...
+        struct('id','narrow', 'tok','', 'levels',{{0, [0 40], [0 20 40], [0 40/3 80/3 40], [0 10 20 30 40]}}, ...
+               'text','phase steps 0..40 deg/element (beam steered only within a ~16-28 deg sector away from the BS), as all earlier runs'), ...
+        struct('id','wide', 'tok','_cb-wide', 'levels',{arrayfun(wide, 1:5, 'UniformOutput', false)}, ...
+               'text','phase steps spread evenly over -180..180 deg/element (beams spread evenly over all directions)')];
+    cat.levels = cat.codebooks(1).levels;     % default (narrow)
 
     nz = @(name, g, txt) struct('name',name, 'tx_dBm',23, 'noise_dBm',-92, ...
                                 'pilot_gain_dB',g, 'text',txt);
@@ -58,16 +68,18 @@ function cat = abl_catalog()
            'protocol of RIS channel estimation, used here at covariance level.'])];
 
     % Scenario list of the matrix stage
-    S = struct('structure',{}, 'feature',{}, 'direct',{}, 'Ks',{});
-    for s = {'S1','S2','S3'}
-        for f = {'F0','F1','F2','F3'}
-            for d = [true false]
-                if strcmp(f{1},'F3') && ~d, continue; end   % OFF state would be noise only
-                S(end+1) = struct('structure',s{1}, 'feature',f{1}, 'direct',d, 'Ks',1:5); %#ok<AGROW>
+    S = struct('structure',{}, 'feature',{}, 'direct',{}, 'Ks',{}, 'codebook',{});
+    for cb = {'narrow','wide'}
+        for s = {'S1','S2','S3'}
+            for f = {'F0','F1','F2','F3'}
+                for d = [true false]
+                    if strcmp(f{1},'F3') && ~d, continue; end   % OFF state would be noise only
+                    S(end+1) = struct('structure',s{1}, 'feature',f{1}, 'direct',d, 'Ks',1:5, 'codebook',cb{1}); %#ok<AGROW>
+                end
             end
         end
+        S(end+1) = struct('structure','S4', 'feature','F0', 'direct',true, 'Ks',3, 'codebook',cb{1}); %#ok<AGROW>
     end
-    S(end+1) = struct('structure','S4', 'feature','F0', 'direct',true, 'Ks',3);
     for i = 1:numel(S)
         fi = strcmp({cat.features.id}, S(i).feature);
         S(i).Ks = S(i).Ks(S(i).Ks >= cat.features(fi).minK);
@@ -78,6 +90,7 @@ end
 
 function n = abl_name(cat, s)
     d = {'dir-off','dir-on'};
-    n = sprintf('%s_%s_%s', cat.structures(strcmp({cat.structures.id}, s.structure)).tok, ...
-                cat.features(strcmp({cat.features.id}, s.feature)).tok, d{s.direct+1});
+    n = sprintf('%s_%s_%s%s', cat.structures(strcmp({cat.structures.id}, s.structure)).tok, ...
+                cat.features(strcmp({cat.features.id}, s.feature)).tok, d{s.direct+1}, ...
+                cat.codebooks(strcmp({cat.codebooks.id}, s.codebook)).tok);
 end

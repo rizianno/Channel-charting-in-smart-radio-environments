@@ -18,7 +18,7 @@ function T = abl_evaluate(scn, K, U, charts, R, CAT, noiseName, outDir)
     if ~exist(outDir,'dir'), mkdir(outDir); end
     jobs = abl_jobs(scn, K, charts, CAT, noiseName);
     isF0 = strcmp(scn.feature, 'F0');
-    nCfg = numel(CAT.levels{K})^2;
+    nCfg = numel(abl_levels(CAT, scn, K))^2;
 
     hasEst = false(U.n,2);  isAnch = false(U.n,2);
     EST = struct();
