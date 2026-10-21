@@ -1,6 +1,6 @@
 # S4-perEMS-frontboth_F0-cov-per-sweep_dir-on
 
-Noise model: `est_G60dB`. Codebook sizes: 3x3. Generated 2026-10-21 17:27 by `experiments/Main_AoA_Ablations.m`.
+Noise model: `est_G60dB`. Codebook sizes: 3x3. Generated 2026-10-21 19:45 by `experiments/Main_AoA_Ablations.m`.
 
 ## What this simulation does
 - **Users and charts (S4).** Two 1-D per-surface charts as S2, but on exactly the S1 users and anchors: isolates "joint vs separate charts" with identical users.
@@ -9,18 +9,20 @@ Noise model: `est_G60dB`. Codebook sizes: 3x3. Generated 2026-10-21 17:27 by `ex
 - **Input feature (F0).** Full covariance of each acquisition: one chart per EMS configuration, then fusion across configurations (global and local quality-weighted), as in the reference.
 - **Direct path.** **on**: the direct BS-UE channel (LoS + one bounce, `H_LOS_1bounce`) is included, as in the reference.
 - **Noise (est_G60dB).** Estimated channels as est_G0dB, with a 60 dB pilot processing gain (noise variance on each estimate divided by 10^6).
+- **Codebook range (narrow).** phase steps 0..40 deg/element (beam steered only within a ~16-28 deg sector away from the BS), as all earlier runs.
 - **Unchanged everywhere:** dataset, surface geometry, t-SNE (`tsne_sem`, perplexity 150), Log-Euclidean distance, 15% supervision, fusion rule (where there is fusion).
 
-| K | phase gradients per EMS [deg] | acquisitions |
+| K | phase steps per EMS [deg/element] | acquisitions |
 |---|---|---|
 | 3x3 | [0 20 40] | 9 |
 
 ## How it differs from the other scenarios
-- **vs the reference** (S1 joint, F0 per-sweep covariance + fusion, direct on): users/charts S4-perEMS-frontboth instead of S1-joint.
+- **vs the reference** (S1 joint, F0 per-sweep covariance + fusion, direct on, narrow codebook): users/charts S4-perEMS-frontboth instead of S1-joint.
 - **Scenarios that differ in exactly one factor** (compare with these to isolate it):
   - `S1-joint_F0-cov-per-sweep_dir-on`: users/charts S1-joint instead of S4-perEMS-frontboth
   - `S2-perEMS_F0-cov-per-sweep_dir-on`: users/charts S2-perEMS instead of S4-perEMS-frontboth
   - `S3-joint-allUE_F0-cov-per-sweep_dir-on`: users/charts S3-joint-allUE instead of S4-perEMS-frontboth
+  - `S4-perEMS-frontboth_F0-cov-per-sweep_dir-on_cb-wide`: wide codebook (-180..180 deg/element) instead of narrow (0..40 deg/element)
 - Older reference (no noise, old fixed 1e-6 floor): `results_aoa/coarse_3x3` (3x3) and `results_aoa/full_11x11`.
 
 ## Files

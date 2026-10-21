@@ -2,7 +2,7 @@
 
 Noise: Estimated channels as est_G0dB, with a 60 dB pilot processing gain (noise variance on each estimate divided by 10^6).
 
-Users: 3200 (in front of both surfaces: 2033; EMS1: 2262; EMS2: 2971). Runtime 81 min.
+Users: 3200 (in front of both surfaces: 2033; EMS1: 2262; EMS2: 2971). Runtime 116 min.
 
 ## Factors
 - **S1** (`S1-joint`): One joint 2-D t-SNE chart whose coordinates are the azimuths from EMS1 and EMS2. Users: those in front of both surfaces; anchors: 15% of them. Same structure as the reference runs (results_aoa/coarse_3x3, full_11x11).
@@ -14,6 +14,8 @@ Users: 3200 (in front of both surfaces: 2033; EMS1: 2262; EMS2: 2971). Runtime 8
 - **F2** (`F2-sweep-change`): Sweep changes: per user, the log-covariance of each configuration minus that user's mean over the configurations, stacked; one chart. Removes, in the log domain, everything that does not change with the surface phases (direct path, static scattering). Joint charts centre over all K^2 configurations; per-surface charts centre along their own surface's sweep with the other surface fixed. Needs K >= 2.
 - **F3** (`F3-off-subtract`): OFF subtraction: per configuration, the log-covariance with the surface(s) on minus the log-covariance of an extra acquisition with the surface(s) ideally off (absorbing), stacked; one chart. Joint charts switch both surfaces off (1 extra acquisition); per-surface charts switch off only their own surface (one extra acquisition per phase of the other surface). This is the ON/OFF protocol of RIS channel estimation, used here at covariance level.
 - **Direct path** `dir-on` / `dir-off` (ideal removal).
+- **Codebook range `narrow`** (folder suffix ``): phase steps 0..40 deg/element (beam steered only within a ~16-28 deg sector away from the BS), as all earlier runs.
+- **Codebook range `wide`** (folder suffix `_cb-wide`): phase steps spread evenly over -180..180 deg/element (beams spread evenly over all directions).
 - **Noise `est_G60dB`**: Estimated channels as est_G0dB, with a 60 dB pilot processing gain (noise variance on each estimate divided by 10^6).
 
 ## Results at a glance (pooled EMS1+EMS2 median |error| [deg], subset `common`)
@@ -145,5 +147,130 @@ Users: 3200 (in front of both surfaces: 2033; EMS1: 2262; EMS2: 2971). Runtime 8
 | est_G60dB | [S3-joint-allUE_F3-off-subtract_dir-on](S3-joint-allUE_F3-off-subtract_dir-on/) | chart | 5 | 26 | 35.9 | 49.0 | 35.6 | 36.4 |
 | est_G60dB | [S4-perEMS-frontboth_F0-cov-per-sweep_dir-on](S4-perEMS-frontboth_F0-cov-per-sweep_dir-on/) | local_orig | 3 | 9 | 5.4 | 10.3 | 5.9 | 4.6 |
 | est_G60dB | [S4-perEMS-frontboth_F0-cov-per-sweep_dir-on](S4-perEMS-frontboth_F0-cov-per-sweep_dir-on/) | local_free | 3 | 9 | 5.4 | 11.1 | 6.1 | 4.7 |
+| est_G60dB | [S1-joint_F0-cov-per-sweep_dir-on_cb-wide](S1-joint_F0-cov-per-sweep_dir-on_cb-wide/) | local_orig | 1 | 1 | 5.7 | 12.9 | 6.4 | 5.1 |
+| est_G60dB | [S1-joint_F0-cov-per-sweep_dir-on_cb-wide](S1-joint_F0-cov-per-sweep_dir-on_cb-wide/) | local_free | 1 | 1 | 5.7 | 12.9 | 6.4 | 5.1 |
+| est_G60dB | [S1-joint_F0-cov-per-sweep_dir-on_cb-wide](S1-joint_F0-cov-per-sweep_dir-on_cb-wide/) | local_orig | 2 | 4 | 5.3 | 11.9 | 6.2 | 4.8 |
+| est_G60dB | [S1-joint_F0-cov-per-sweep_dir-on_cb-wide](S1-joint_F0-cov-per-sweep_dir-on_cb-wide/) | local_free | 2 | 4 | 5.4 | 12.1 | 6.2 | 4.8 |
+| est_G60dB | [S1-joint_F0-cov-per-sweep_dir-on_cb-wide](S1-joint_F0-cov-per-sweep_dir-on_cb-wide/) | local_orig | 3 | 9 | 5.5 | 11.8 | 6.1 | 4.9 |
+| est_G60dB | [S1-joint_F0-cov-per-sweep_dir-on_cb-wide](S1-joint_F0-cov-per-sweep_dir-on_cb-wide/) | local_free | 3 | 9 | 5.6 | 12.2 | 6.2 | 4.9 |
+| est_G60dB | [S1-joint_F0-cov-per-sweep_dir-on_cb-wide](S1-joint_F0-cov-per-sweep_dir-on_cb-wide/) | local_orig | 4 | 16 | 5.5 | 11.8 | 6.4 | 4.8 |
+| est_G60dB | [S1-joint_F0-cov-per-sweep_dir-on_cb-wide](S1-joint_F0-cov-per-sweep_dir-on_cb-wide/) | local_free | 4 | 16 | 5.6 | 12.3 | 6.5 | 4.8 |
+| est_G60dB | [S1-joint_F0-cov-per-sweep_dir-on_cb-wide](S1-joint_F0-cov-per-sweep_dir-on_cb-wide/) | local_orig | 5 | 25 | 5.5 | 11.4 | 6.1 | 5.0 |
+| est_G60dB | [S1-joint_F0-cov-per-sweep_dir-on_cb-wide](S1-joint_F0-cov-per-sweep_dir-on_cb-wide/) | local_free | 5 | 25 | 5.6 | 12.0 | 6.3 | 5.0 |
+| est_G60dB | [S1-joint_F0-cov-per-sweep_dir-off_cb-wide](S1-joint_F0-cov-per-sweep_dir-off_cb-wide/) | local_orig | 1 | 1 | 40.0 | 50.1 | 37.7 | 41.6 |
+| est_G60dB | [S1-joint_F0-cov-per-sweep_dir-off_cb-wide](S1-joint_F0-cov-per-sweep_dir-off_cb-wide/) | local_free | 1 | 1 | 40.0 | 50.1 | 37.7 | 41.6 |
+| est_G60dB | [S1-joint_F0-cov-per-sweep_dir-off_cb-wide](S1-joint_F0-cov-per-sweep_dir-off_cb-wide/) | local_orig | 2 | 4 | 41.7 | 45.3 | 40.4 | 43.8 |
+| est_G60dB | [S1-joint_F0-cov-per-sweep_dir-off_cb-wide](S1-joint_F0-cov-per-sweep_dir-off_cb-wide/) | local_free | 2 | 4 | 44.0 | 47.2 | 42.5 | 46.5 |
+| est_G60dB | [S1-joint_F0-cov-per-sweep_dir-off_cb-wide](S1-joint_F0-cov-per-sweep_dir-off_cb-wide/) | local_orig | 3 | 9 | 40.7 | 42.8 | 39.2 | 43.0 |
+| est_G60dB | [S1-joint_F0-cov-per-sweep_dir-off_cb-wide](S1-joint_F0-cov-per-sweep_dir-off_cb-wide/) | local_free | 3 | 9 | 43.3 | 45.4 | 41.4 | 45.8 |
+| est_G60dB | [S1-joint_F0-cov-per-sweep_dir-off_cb-wide](S1-joint_F0-cov-per-sweep_dir-off_cb-wide/) | local_orig | 4 | 16 | 40.9 | 42.7 | 39.7 | 41.9 |
+| est_G60dB | [S1-joint_F0-cov-per-sweep_dir-off_cb-wide](S1-joint_F0-cov-per-sweep_dir-off_cb-wide/) | local_free | 4 | 16 | 43.7 | 45.4 | 43.0 | 44.9 |
+| est_G60dB | [S1-joint_F0-cov-per-sweep_dir-off_cb-wide](S1-joint_F0-cov-per-sweep_dir-off_cb-wide/) | local_orig | 5 | 25 | 38.1 | 39.6 | 36.9 | 39.3 |
+| est_G60dB | [S1-joint_F0-cov-per-sweep_dir-off_cb-wide](S1-joint_F0-cov-per-sweep_dir-off_cb-wide/) | local_free | 5 | 25 | 41.0 | 42.6 | 40.1 | 42.5 |
+| est_G60dB | [S1-joint_F1-stacked-cov_dir-on_cb-wide](S1-joint_F1-stacked-cov_dir-on_cb-wide/) | chart | 2 | 4 | 5.7 | 13.0 | 6.4 | 5.1 |
+| est_G60dB | [S1-joint_F1-stacked-cov_dir-on_cb-wide](S1-joint_F1-stacked-cov_dir-on_cb-wide/) | chart | 3 | 9 | 5.9 | 13.0 | 6.8 | 5.0 |
+| est_G60dB | [S1-joint_F1-stacked-cov_dir-on_cb-wide](S1-joint_F1-stacked-cov_dir-on_cb-wide/) | chart | 4 | 16 | 5.3 | 12.9 | 6.0 | 4.8 |
+| est_G60dB | [S1-joint_F1-stacked-cov_dir-on_cb-wide](S1-joint_F1-stacked-cov_dir-on_cb-wide/) | chart | 5 | 25 | 5.2 | 11.2 | 5.9 | 4.7 |
+| est_G60dB | [S1-joint_F1-stacked-cov_dir-off_cb-wide](S1-joint_F1-stacked-cov_dir-off_cb-wide/) | chart | 2 | 4 | 40.6 | 50.5 | 39.5 | 41.5 |
+| est_G60dB | [S1-joint_F1-stacked-cov_dir-off_cb-wide](S1-joint_F1-stacked-cov_dir-off_cb-wide/) | chart | 3 | 9 | 37.4 | 47.9 | 36.3 | 39.1 |
+| est_G60dB | [S1-joint_F1-stacked-cov_dir-off_cb-wide](S1-joint_F1-stacked-cov_dir-off_cb-wide/) | chart | 4 | 16 | 34.0 | 46.0 | 33.3 | 35.2 |
+| est_G60dB | [S1-joint_F1-stacked-cov_dir-off_cb-wide](S1-joint_F1-stacked-cov_dir-off_cb-wide/) | chart | 5 | 25 | 29.9 | 43.3 | 28.1 | 31.4 |
+| est_G60dB | [S1-joint_F2-sweep-change_dir-on_cb-wide](S1-joint_F2-sweep-change_dir-on_cb-wide/) | chart | 2 | 4 | 46.8 | 57.5 | 45.3 | 48.6 |
+| est_G60dB | [S1-joint_F2-sweep-change_dir-on_cb-wide](S1-joint_F2-sweep-change_dir-on_cb-wide/) | chart | 3 | 9 | 46.9 | 57.7 | 46.2 | 47.3 |
+| est_G60dB | [S1-joint_F2-sweep-change_dir-on_cb-wide](S1-joint_F2-sweep-change_dir-on_cb-wide/) | chart | 4 | 16 | 44.4 | 56.4 | 43.2 | 45.3 |
+| est_G60dB | [S1-joint_F2-sweep-change_dir-on_cb-wide](S1-joint_F2-sweep-change_dir-on_cb-wide/) | chart | 5 | 25 | 51.2 | 58.5 | 51.9 | 50.5 |
+| est_G60dB | [S1-joint_F2-sweep-change_dir-off_cb-wide](S1-joint_F2-sweep-change_dir-off_cb-wide/) | chart | 2 | 4 | 42.7 | 51.8 | 41.4 | 44.7 |
+| est_G60dB | [S1-joint_F2-sweep-change_dir-off_cb-wide](S1-joint_F2-sweep-change_dir-off_cb-wide/) | chart | 3 | 9 | 39.5 | 48.7 | 36.4 | 43.4 |
+| est_G60dB | [S1-joint_F2-sweep-change_dir-off_cb-wide](S1-joint_F2-sweep-change_dir-off_cb-wide/) | chart | 4 | 16 | 36.4 | 46.7 | 34.0 | 38.9 |
+| est_G60dB | [S1-joint_F2-sweep-change_dir-off_cb-wide](S1-joint_F2-sweep-change_dir-off_cb-wide/) | chart | 5 | 25 | 30.8 | 43.7 | 30.5 | 31.5 |
+| est_G60dB | [S1-joint_F3-off-subtract_dir-on_cb-wide](S1-joint_F3-off-subtract_dir-on_cb-wide/) | chart | 1 | 2 | 45.9 | 56.5 | 45.0 | 46.7 |
+| est_G60dB | [S1-joint_F3-off-subtract_dir-on_cb-wide](S1-joint_F3-off-subtract_dir-on_cb-wide/) | chart | 2 | 5 | 47.1 | 58.3 | 48.0 | 46.4 |
+| est_G60dB | [S1-joint_F3-off-subtract_dir-on_cb-wide](S1-joint_F3-off-subtract_dir-on_cb-wide/) | chart | 3 | 10 | 47.5 | 59.1 | 48.4 | 46.2 |
+| est_G60dB | [S1-joint_F3-off-subtract_dir-on_cb-wide](S1-joint_F3-off-subtract_dir-on_cb-wide/) | chart | 4 | 17 | 47.7 | 59.8 | 48.3 | 46.3 |
+| est_G60dB | [S1-joint_F3-off-subtract_dir-on_cb-wide](S1-joint_F3-off-subtract_dir-on_cb-wide/) | chart | 5 | 26 | 49.5 | 59.9 | 51.7 | 47.4 |
+| est_G60dB | [S2-perEMS_F0-cov-per-sweep_dir-on_cb-wide](S2-perEMS_F0-cov-per-sweep_dir-on_cb-wide/) | local_orig | 1 | 1 | 5.9 | 14.4 | 6.5 | 5.4 |
+| est_G60dB | [S2-perEMS_F0-cov-per-sweep_dir-on_cb-wide](S2-perEMS_F0-cov-per-sweep_dir-on_cb-wide/) | local_free | 1 | 1 | 5.9 | 14.4 | 6.5 | 5.4 |
+| est_G60dB | [S2-perEMS_F0-cov-per-sweep_dir-on_cb-wide](S2-perEMS_F0-cov-per-sweep_dir-on_cb-wide/) | local_orig | 2 | 4 | 6.2 | 12.9 | 6.9 | 5.6 |
+| est_G60dB | [S2-perEMS_F0-cov-per-sweep_dir-on_cb-wide](S2-perEMS_F0-cov-per-sweep_dir-on_cb-wide/) | local_free | 2 | 4 | 6.3 | 13.8 | 6.9 | 5.7 |
+| est_G60dB | [S2-perEMS_F0-cov-per-sweep_dir-on_cb-wide](S2-perEMS_F0-cov-per-sweep_dir-on_cb-wide/) | local_orig | 3 | 9 | 6.5 | 12.5 | 6.9 | 6.2 |
+| est_G60dB | [S2-perEMS_F0-cov-per-sweep_dir-on_cb-wide](S2-perEMS_F0-cov-per-sweep_dir-on_cb-wide/) | local_free | 3 | 9 | 6.6 | 13.6 | 7.0 | 6.3 |
+| est_G60dB | [S2-perEMS_F0-cov-per-sweep_dir-on_cb-wide](S2-perEMS_F0-cov-per-sweep_dir-on_cb-wide/) | local_orig | 4 | 16 | 6.4 | 12.4 | 6.8 | 6.0 |
+| est_G60dB | [S2-perEMS_F0-cov-per-sweep_dir-on_cb-wide](S2-perEMS_F0-cov-per-sweep_dir-on_cb-wide/) | local_free | 4 | 16 | 6.5 | 13.5 | 6.9 | 6.1 |
+| est_G60dB | [S2-perEMS_F0-cov-per-sweep_dir-on_cb-wide](S2-perEMS_F0-cov-per-sweep_dir-on_cb-wide/) | local_orig | 5 | 25 | 6.2 | 11.9 | 6.7 | 5.8 |
+| est_G60dB | [S2-perEMS_F0-cov-per-sweep_dir-on_cb-wide](S2-perEMS_F0-cov-per-sweep_dir-on_cb-wide/) | local_free | 5 | 25 | 6.3 | 13.1 | 6.8 | 6.0 |
+| est_G60dB | [S2-perEMS_F0-cov-per-sweep_dir-off_cb-wide](S2-perEMS_F0-cov-per-sweep_dir-off_cb-wide/) | local_orig | 1 | 1 | 39.6 | 45.5 | 35.7 | 42.8 |
+| est_G60dB | [S2-perEMS_F0-cov-per-sweep_dir-off_cb-wide](S2-perEMS_F0-cov-per-sweep_dir-off_cb-wide/) | local_free | 1 | 1 | 39.6 | 45.5 | 35.7 | 42.8 |
+| est_G60dB | [S2-perEMS_F0-cov-per-sweep_dir-off_cb-wide](S2-perEMS_F0-cov-per-sweep_dir-off_cb-wide/) | local_orig | 2 | 4 | 42.1 | 44.5 | 40.6 | 43.7 |
+| est_G60dB | [S2-perEMS_F0-cov-per-sweep_dir-off_cb-wide](S2-perEMS_F0-cov-per-sweep_dir-off_cb-wide/) | local_free | 2 | 4 | 44.2 | 46.0 | 42.7 | 46.1 |
+| est_G60dB | [S2-perEMS_F0-cov-per-sweep_dir-off_cb-wide](S2-perEMS_F0-cov-per-sweep_dir-off_cb-wide/) | local_orig | 3 | 9 | 41.4 | 43.4 | 40.4 | 43.7 |
+| est_G60dB | [S2-perEMS_F0-cov-per-sweep_dir-off_cb-wide](S2-perEMS_F0-cov-per-sweep_dir-off_cb-wide/) | local_free | 3 | 9 | 43.8 | 45.4 | 42.4 | 46.1 |
+| est_G60dB | [S2-perEMS_F0-cov-per-sweep_dir-off_cb-wide](S2-perEMS_F0-cov-per-sweep_dir-off_cb-wide/) | local_orig | 4 | 16 | 43.0 | 43.8 | 42.9 | 43.0 |
+| est_G60dB | [S2-perEMS_F0-cov-per-sweep_dir-off_cb-wide](S2-perEMS_F0-cov-per-sweep_dir-off_cb-wide/) | local_free | 4 | 16 | 45.2 | 45.9 | 45.0 | 45.6 |
+| est_G60dB | [S2-perEMS_F0-cov-per-sweep_dir-off_cb-wide](S2-perEMS_F0-cov-per-sweep_dir-off_cb-wide/) | local_orig | 5 | 25 | 41.9 | 42.4 | 42.4 | 41.6 |
+| est_G60dB | [S2-perEMS_F0-cov-per-sweep_dir-off_cb-wide](S2-perEMS_F0-cov-per-sweep_dir-off_cb-wide/) | local_free | 5 | 25 | 44.2 | 44.6 | 44.6 | 43.8 |
+| est_G60dB | [S2-perEMS_F1-stacked-cov_dir-on_cb-wide](S2-perEMS_F1-stacked-cov_dir-on_cb-wide/) | chart | 2 | 4 | 5.3 | 14.3 | 4.9 | 5.8 |
+| est_G60dB | [S2-perEMS_F1-stacked-cov_dir-on_cb-wide](S2-perEMS_F1-stacked-cov_dir-on_cb-wide/) | chart | 3 | 9 | 5.2 | 12.7 | 4.9 | 5.5 |
+| est_G60dB | [S2-perEMS_F1-stacked-cov_dir-on_cb-wide](S2-perEMS_F1-stacked-cov_dir-on_cb-wide/) | chart | 4 | 16 | 5.1 | 12.4 | 4.8 | 5.3 |
+| est_G60dB | [S2-perEMS_F1-stacked-cov_dir-on_cb-wide](S2-perEMS_F1-stacked-cov_dir-on_cb-wide/) | chart | 5 | 25 | 4.7 | 10.8 | 4.5 | 4.9 |
+| est_G60dB | [S2-perEMS_F1-stacked-cov_dir-off_cb-wide](S2-perEMS_F1-stacked-cov_dir-off_cb-wide/) | chart | 2 | 4 | 39.3 | 45.6 | 36.1 | 42.9 |
+| est_G60dB | [S2-perEMS_F1-stacked-cov_dir-off_cb-wide](S2-perEMS_F1-stacked-cov_dir-off_cb-wide/) | chart | 3 | 9 | 37.5 | 46.1 | 33.1 | 40.8 |
+| est_G60dB | [S2-perEMS_F1-stacked-cov_dir-off_cb-wide](S2-perEMS_F1-stacked-cov_dir-off_cb-wide/) | chart | 4 | 16 | 35.7 | 42.4 | 31.1 | 40.8 |
+| est_G60dB | [S2-perEMS_F1-stacked-cov_dir-off_cb-wide](S2-perEMS_F1-stacked-cov_dir-off_cb-wide/) | chart | 5 | 25 | 28.2 | 42.3 | 27.3 | 29.0 |
+| est_G60dB | [S2-perEMS_F2-sweep-change_dir-on_cb-wide](S2-perEMS_F2-sweep-change_dir-on_cb-wide/) | chart | 2 | 4 | 48.6 | 53.6 | 46.2 | 50.8 |
+| est_G60dB | [S2-perEMS_F2-sweep-change_dir-on_cb-wide](S2-perEMS_F2-sweep-change_dir-on_cb-wide/) | chart | 3 | 9 | 50.6 | 52.7 | 46.7 | 51.9 |
+| est_G60dB | [S2-perEMS_F2-sweep-change_dir-on_cb-wide](S2-perEMS_F2-sweep-change_dir-on_cb-wide/) | chart | 4 | 16 | 49.4 | 52.5 | 45.9 | 51.6 |
+| est_G60dB | [S2-perEMS_F2-sweep-change_dir-on_cb-wide](S2-perEMS_F2-sweep-change_dir-on_cb-wide/) | chart | 5 | 25 | 52.1 | 59.7 | 51.1 | 52.8 |
+| est_G60dB | [S2-perEMS_F2-sweep-change_dir-off_cb-wide](S2-perEMS_F2-sweep-change_dir-off_cb-wide/) | chart | 2 | 4 | 43.7 | 48.1 | 41.2 | 47.1 |
+| est_G60dB | [S2-perEMS_F2-sweep-change_dir-off_cb-wide](S2-perEMS_F2-sweep-change_dir-off_cb-wide/) | chart | 3 | 9 | 41.9 | 48.6 | 35.7 | 44.4 |
+| est_G60dB | [S2-perEMS_F2-sweep-change_dir-off_cb-wide](S2-perEMS_F2-sweep-change_dir-off_cb-wide/) | chart | 4 | 16 | 45.8 | 49.2 | 36.4 | 53.3 |
+| est_G60dB | [S2-perEMS_F2-sweep-change_dir-off_cb-wide](S2-perEMS_F2-sweep-change_dir-off_cb-wide/) | chart | 5 | 25 | 41.2 | 52.4 | 35.6 | 45.3 |
+| est_G60dB | [S2-perEMS_F3-off-subtract_dir-on_cb-wide](S2-perEMS_F3-off-subtract_dir-on_cb-wide/) | chart | 1 | 3 | 50.1 | 53.6 | 47.3 | 51.9 |
+| est_G60dB | [S2-perEMS_F3-off-subtract_dir-on_cb-wide](S2-perEMS_F3-off-subtract_dir-on_cb-wide/) | chart | 2 | 8 | 49.9 | 53.0 | 47.8 | 51.1 |
+| est_G60dB | [S2-perEMS_F3-off-subtract_dir-on_cb-wide](S2-perEMS_F3-off-subtract_dir-on_cb-wide/) | chart | 3 | 15 | 50.3 | 53.9 | 48.9 | 51.3 |
+| est_G60dB | [S2-perEMS_F3-off-subtract_dir-on_cb-wide](S2-perEMS_F3-off-subtract_dir-on_cb-wide/) | chart | 4 | 24 | 50.6 | 52.4 | 48.3 | 51.5 |
+| est_G60dB | [S2-perEMS_F3-off-subtract_dir-on_cb-wide](S2-perEMS_F3-off-subtract_dir-on_cb-wide/) | chart | 5 | 35 | 50.2 | 53.3 | 47.1 | 52.1 |
+| est_G60dB | [S3-joint-allUE_F0-cov-per-sweep_dir-on_cb-wide](S3-joint-allUE_F0-cov-per-sweep_dir-on_cb-wide/) | local_orig | 1 | 1 | 5.7 | 13.2 | 6.5 | 5.1 |
+| est_G60dB | [S3-joint-allUE_F0-cov-per-sweep_dir-on_cb-wide](S3-joint-allUE_F0-cov-per-sweep_dir-on_cb-wide/) | local_free | 1 | 1 | 5.7 | 13.2 | 6.5 | 5.1 |
+| est_G60dB | [S3-joint-allUE_F0-cov-per-sweep_dir-on_cb-wide](S3-joint-allUE_F0-cov-per-sweep_dir-on_cb-wide/) | local_orig | 2 | 4 | 5.1 | 11.0 | 6.6 | 4.2 |
+| est_G60dB | [S3-joint-allUE_F0-cov-per-sweep_dir-on_cb-wide](S3-joint-allUE_F0-cov-per-sweep_dir-on_cb-wide/) | local_free | 2 | 4 | 5.1 | 11.8 | 7.0 | 4.2 |
+| est_G60dB | [S3-joint-allUE_F0-cov-per-sweep_dir-on_cb-wide](S3-joint-allUE_F0-cov-per-sweep_dir-on_cb-wide/) | local_orig | 3 | 9 | 5.6 | 11.9 | 6.5 | 4.9 |
+| est_G60dB | [S3-joint-allUE_F0-cov-per-sweep_dir-on_cb-wide](S3-joint-allUE_F0-cov-per-sweep_dir-on_cb-wide/) | local_free | 3 | 9 | 5.7 | 12.4 | 6.8 | 4.9 |
+| est_G60dB | [S3-joint-allUE_F0-cov-per-sweep_dir-on_cb-wide](S3-joint-allUE_F0-cov-per-sweep_dir-on_cb-wide/) | local_orig | 4 | 16 | 5.0 | 11.1 | 6.1 | 4.3 |
+| est_G60dB | [S3-joint-allUE_F0-cov-per-sweep_dir-on_cb-wide](S3-joint-allUE_F0-cov-per-sweep_dir-on_cb-wide/) | local_free | 4 | 16 | 5.1 | 12.0 | 6.4 | 4.4 |
+| est_G60dB | [S3-joint-allUE_F0-cov-per-sweep_dir-on_cb-wide](S3-joint-allUE_F0-cov-per-sweep_dir-on_cb-wide/) | local_orig | 5 | 25 | 4.4 | 9.5 | 5.4 | 3.8 |
+| est_G60dB | [S3-joint-allUE_F0-cov-per-sweep_dir-on_cb-wide](S3-joint-allUE_F0-cov-per-sweep_dir-on_cb-wide/) | local_free | 5 | 25 | 4.5 | 10.6 | 5.6 | 3.8 |
+| est_G60dB | [S3-joint-allUE_F0-cov-per-sweep_dir-off_cb-wide](S3-joint-allUE_F0-cov-per-sweep_dir-off_cb-wide/) | local_orig | 1 | 1 | 40.3 | 50.3 | 39.6 | 40.9 |
+| est_G60dB | [S3-joint-allUE_F0-cov-per-sweep_dir-off_cb-wide](S3-joint-allUE_F0-cov-per-sweep_dir-off_cb-wide/) | local_free | 1 | 1 | 40.3 | 50.3 | 39.6 | 40.9 |
+| est_G60dB | [S3-joint-allUE_F0-cov-per-sweep_dir-off_cb-wide](S3-joint-allUE_F0-cov-per-sweep_dir-off_cb-wide/) | local_orig | 2 | 4 | 40.6 | 44.8 | 38.4 | 42.4 |
+| est_G60dB | [S3-joint-allUE_F0-cov-per-sweep_dir-off_cb-wide](S3-joint-allUE_F0-cov-per-sweep_dir-off_cb-wide/) | local_free | 2 | 4 | 43.3 | 47.0 | 41.2 | 45.7 |
+| est_G60dB | [S3-joint-allUE_F0-cov-per-sweep_dir-off_cb-wide](S3-joint-allUE_F0-cov-per-sweep_dir-off_cb-wide/) | local_orig | 3 | 9 | 40.1 | 42.3 | 37.6 | 43.4 |
+| est_G60dB | [S3-joint-allUE_F0-cov-per-sweep_dir-off_cb-wide](S3-joint-allUE_F0-cov-per-sweep_dir-off_cb-wide/) | local_free | 3 | 9 | 43.1 | 45.0 | 40.9 | 46.8 |
+| est_G60dB | [S3-joint-allUE_F0-cov-per-sweep_dir-off_cb-wide](S3-joint-allUE_F0-cov-per-sweep_dir-off_cb-wide/) | local_orig | 4 | 16 | 40.8 | 42.5 | 39.6 | 41.7 |
+| est_G60dB | [S3-joint-allUE_F0-cov-per-sweep_dir-off_cb-wide](S3-joint-allUE_F0-cov-per-sweep_dir-off_cb-wide/) | local_free | 4 | 16 | 44.2 | 45.4 | 43.1 | 44.9 |
+| est_G60dB | [S3-joint-allUE_F0-cov-per-sweep_dir-off_cb-wide](S3-joint-allUE_F0-cov-per-sweep_dir-off_cb-wide/) | local_orig | 5 | 25 | 38.4 | 39.7 | 36.4 | 40.6 |
+| est_G60dB | [S3-joint-allUE_F0-cov-per-sweep_dir-off_cb-wide](S3-joint-allUE_F0-cov-per-sweep_dir-off_cb-wide/) | local_free | 5 | 25 | 41.8 | 42.9 | 39.2 | 43.7 |
+| est_G60dB | [S3-joint-allUE_F1-stacked-cov_dir-on_cb-wide](S3-joint-allUE_F1-stacked-cov_dir-on_cb-wide/) | chart | 2 | 4 | 4.1 | 12.3 | 4.7 | 3.7 |
+| est_G60dB | [S3-joint-allUE_F1-stacked-cov_dir-on_cb-wide](S3-joint-allUE_F1-stacked-cov_dir-on_cb-wide/) | chart | 3 | 9 | 4.2 | 12.4 | 4.8 | 3.7 |
+| est_G60dB | [S3-joint-allUE_F1-stacked-cov_dir-on_cb-wide](S3-joint-allUE_F1-stacked-cov_dir-on_cb-wide/) | chart | 4 | 16 | 4.0 | 11.6 | 4.6 | 3.5 |
+| est_G60dB | [S3-joint-allUE_F1-stacked-cov_dir-on_cb-wide](S3-joint-allUE_F1-stacked-cov_dir-on_cb-wide/) | chart | 5 | 25 | 3.9 | 10.2 | 4.3 | 3.5 |
+| est_G60dB | [S3-joint-allUE_F1-stacked-cov_dir-off_cb-wide](S3-joint-allUE_F1-stacked-cov_dir-off_cb-wide/) | chart | 2 | 4 | 40.9 | 50.8 | 37.7 | 44.1 |
+| est_G60dB | [S3-joint-allUE_F1-stacked-cov_dir-off_cb-wide](S3-joint-allUE_F1-stacked-cov_dir-off_cb-wide/) | chart | 3 | 9 | 40.6 | 49.3 | 39.0 | 42.6 |
+| est_G60dB | [S3-joint-allUE_F1-stacked-cov_dir-off_cb-wide](S3-joint-allUE_F1-stacked-cov_dir-off_cb-wide/) | chart | 4 | 16 | 35.8 | 47.5 | 32.6 | 39.7 |
+| est_G60dB | [S3-joint-allUE_F1-stacked-cov_dir-off_cb-wide](S3-joint-allUE_F1-stacked-cov_dir-off_cb-wide/) | chart | 5 | 25 | 29.4 | 43.0 | 27.2 | 30.9 |
+| est_G60dB | [S3-joint-allUE_F2-sweep-change_dir-on_cb-wide](S3-joint-allUE_F2-sweep-change_dir-on_cb-wide/) | chart | 2 | 4 | 46.4 | 56.3 | 44.1 | 48.9 |
+| est_G60dB | [S3-joint-allUE_F2-sweep-change_dir-on_cb-wide](S3-joint-allUE_F2-sweep-change_dir-on_cb-wide/) | chart | 3 | 9 | 46.0 | 55.4 | 42.1 | 49.8 |
+| est_G60dB | [S3-joint-allUE_F2-sweep-change_dir-on_cb-wide](S3-joint-allUE_F2-sweep-change_dir-on_cb-wide/) | chart | 4 | 16 | 44.9 | 55.6 | 43.7 | 45.5 |
+| est_G60dB | [S3-joint-allUE_F2-sweep-change_dir-on_cb-wide](S3-joint-allUE_F2-sweep-change_dir-on_cb-wide/) | chart | 5 | 25 | 51.0 | 58.4 | 51.5 | 50.4 |
+| est_G60dB | [S3-joint-allUE_F2-sweep-change_dir-off_cb-wide](S3-joint-allUE_F2-sweep-change_dir-off_cb-wide/) | chart | 2 | 4 | 41.8 | 51.3 | 40.1 | 43.7 |
+| est_G60dB | [S3-joint-allUE_F2-sweep-change_dir-off_cb-wide](S3-joint-allUE_F2-sweep-change_dir-off_cb-wide/) | chart | 3 | 9 | 42.3 | 50.8 | 39.9 | 45.4 |
+| est_G60dB | [S3-joint-allUE_F2-sweep-change_dir-off_cb-wide](S3-joint-allUE_F2-sweep-change_dir-off_cb-wide/) | chart | 4 | 16 | 37.8 | 46.7 | 34.8 | 40.5 |
+| est_G60dB | [S3-joint-allUE_F2-sweep-change_dir-off_cb-wide](S3-joint-allUE_F2-sweep-change_dir-off_cb-wide/) | chart | 5 | 25 | 30.9 | 43.5 | 29.8 | 31.6 |
+| est_G60dB | [S3-joint-allUE_F3-off-subtract_dir-on_cb-wide](S3-joint-allUE_F3-off-subtract_dir-on_cb-wide/) | chart | 1 | 2 | 45.0 | 54.9 | 45.5 | 44.3 |
+| est_G60dB | [S3-joint-allUE_F3-off-subtract_dir-on_cb-wide](S3-joint-allUE_F3-off-subtract_dir-on_cb-wide/) | chart | 2 | 5 | 45.5 | 55.9 | 45.0 | 45.7 |
+| est_G60dB | [S3-joint-allUE_F3-off-subtract_dir-on_cb-wide](S3-joint-allUE_F3-off-subtract_dir-on_cb-wide/) | chart | 3 | 10 | 47.1 | 56.3 | 45.8 | 48.3 |
+| est_G60dB | [S3-joint-allUE_F3-off-subtract_dir-on_cb-wide](S3-joint-allUE_F3-off-subtract_dir-on_cb-wide/) | chart | 4 | 17 | 47.1 | 58.7 | 48.3 | 45.7 |
+| est_G60dB | [S3-joint-allUE_F3-off-subtract_dir-on_cb-wide](S3-joint-allUE_F3-off-subtract_dir-on_cb-wide/) | chart | 5 | 26 | 47.2 | 57.8 | 47.6 | 46.6 |
+| est_G60dB | [S4-perEMS-frontboth_F0-cov-per-sweep_dir-on_cb-wide](S4-perEMS-frontboth_F0-cov-per-sweep_dir-on_cb-wide/) | local_orig | 3 | 9 | 5.6 | 11.1 | 6.6 | 4.7 |
+| est_G60dB | [S4-perEMS-frontboth_F0-cov-per-sweep_dir-on_cb-wide](S4-perEMS-frontboth_F0-cov-per-sweep_dir-on_cb-wide/) | local_free | 3 | 9 | 5.7 | 11.9 | 6.7 | 4.8 |
 
 Each scenario folder has its own README (what changes and which scenarios isolate each factor), `trend.png` (error vs codebook size) and one `K<k>/` folder per codebook size. `comparison_common.png` / `comparison_natural.png` compare all scenarios.

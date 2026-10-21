@@ -1,6 +1,6 @@
 # S3-joint-allUE_F1-stacked-cov_dir-on
 
-Noise model: `est_G60dB`. Codebook sizes: 2x2, 3x3, 4x4, 5x5. Generated 2026-10-21 17:26 by `experiments/Main_AoA_Ablations.m`.
+Noise model: `est_G60dB`. Codebook sizes: 2x2, 3x3, 4x4, 5x5. Generated 2026-10-21 19:44 by `experiments/Main_AoA_Ablations.m`.
 
 ## What this simulation does
 - **Users and charts (S3).** Joint 2-D chart as S1, but t-SNE sees ALL users, including those behind one surface (they have no valid joint label, so they are unlabelled points only). Anchors: the same as S1. Also scored on all users against their geometric azimuth (beyond +-90 deg for users behind a surface, error wrapped to +-180 deg) as the worst case.
@@ -8,9 +8,10 @@ Noise model: `est_G60dB`. Codebook sizes: 2x2, 3x3, 4x4, 5x5. Generated 2026-10-
 - **Input feature (F1).** All acquisitions combined into one feature: the log-covariances of all configurations are stacked and give one chart (no fusion). Control for F2/F3: isolates "one chart from all sweeps" vs "per-sweep charts + fusion". (For K = 1 it equals F0.)
 - **Direct path.** **on**: the direct BS-UE channel (LoS + one bounce, `H_LOS_1bounce`) is included, as in the reference.
 - **Noise (est_G60dB).** Estimated channels as est_G0dB, with a 60 dB pilot processing gain (noise variance on each estimate divided by 10^6).
+- **Codebook range (narrow).** phase steps 0..40 deg/element (beam steered only within a ~16-28 deg sector away from the BS), as all earlier runs.
 - **Unchanged everywhere:** dataset, surface geometry, t-SNE (`tsne_sem`, perplexity 150), Log-Euclidean distance, 15% supervision, fusion rule (where there is fusion).
 
-| K | phase gradients per EMS [deg] | acquisitions |
+| K | phase steps per EMS [deg/element] | acquisitions |
 |---|---|---|
 | 2x2 | [0 40] | 4 |
 | 3x3 | [0 20 40] | 9 |
@@ -18,7 +19,7 @@ Noise model: `est_G60dB`. Codebook sizes: 2x2, 3x3, 4x4, 5x5. Generated 2026-10-
 | 5x5 | [0 10 20 30 40] | 25 |
 
 ## How it differs from the other scenarios
-- **vs the reference** (S1 joint, F0 per-sweep covariance + fusion, direct on): users/charts S3-joint-allUE instead of S1-joint; feature F1-stacked-cov instead of F0-cov-per-sweep.
+- **vs the reference** (S1 joint, F0 per-sweep covariance + fusion, direct on, narrow codebook): users/charts S3-joint-allUE instead of S1-joint; feature F1-stacked-cov instead of F0-cov-per-sweep.
 - **Scenarios that differ in exactly one factor** (compare with these to isolate it):
   - `S1-joint_F1-stacked-cov_dir-on`: users/charts S1-joint instead of S3-joint-allUE
   - `S2-perEMS_F1-stacked-cov_dir-on`: users/charts S2-perEMS instead of S3-joint-allUE
@@ -26,6 +27,7 @@ Noise model: `est_G60dB`. Codebook sizes: 2x2, 3x3, 4x4, 5x5. Generated 2026-10-
   - `S3-joint-allUE_F1-stacked-cov_dir-off`: direct path off instead of on
   - `S3-joint-allUE_F2-sweep-change_dir-on`: feature F2-sweep-change instead of F1-stacked-cov
   - `S3-joint-allUE_F3-off-subtract_dir-on`: feature F3-off-subtract instead of F1-stacked-cov
+  - `S3-joint-allUE_F1-stacked-cov_dir-on_cb-wide`: wide codebook (-180..180 deg/element) instead of narrow (0..40 deg/element)
 - Older reference (no noise, old fixed 1e-6 floor): `results_aoa/coarse_3x3` (3x3) and `results_aoa/full_11x11`.
 
 ## Files
