@@ -40,6 +40,8 @@ function F = abl_state_features(Data, params, st, noise)
     noisy = ~isnan(noise.pilot_gain_dB);
     if noisy, se2 = sn2 / 10^(noise.pilot_gain_dB/10); end
     Nre = params.N_real;
+    flo = 2*sn2;                                           % noiseless floor
+    if isfield(noise,'floor_abs') && ~isnan(noise.floor_abs), flo = noise.floor_abs; end
 
     iu = find(triu(true(Nb),1));
     F  = zeros(nU, Nb + 2*numel(iu));
@@ -51,7 +53,7 @@ function F = abl_state_features(Data, params, st, noise)
             A = sqrt(g2)*Hu + sqrt(se2/2)*complex(randn(rs,Nb,Nr), randn(rs,Nb,Nr));
             R = (A*A' + se2*cwishart(rs, Nb, Nr*(Nre-1))) / Nre;
         else
-            R = (g2/Nre)*(Hu*Hu') + 2*sn2*eye(Nb);
+            R = (g2/Nre)*(Hu*Hu') + flo*eye(Nb);
         end
         R = (R + R')/2;
         [V, ev] = eig(R, 'vector');
