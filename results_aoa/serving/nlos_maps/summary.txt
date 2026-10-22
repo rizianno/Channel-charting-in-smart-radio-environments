@@ -1,0 +1,5 @@
+Users: 3200; LoS: 811; reflection-only: 1504; no BS-UE channel: 885 (LoS threshold -36 dB vs free space)
+Without LoS and reachable by EMS1: 1353, by EMS2: 1951, by both: 1038, by neither: 123
+Codebook used for the best SNR: 60 phase steps, 6 deg/element apart
+EMS1: 1353 users without LoS, azimuth 5-95% range -80..63 deg (sin -0.99..0.89) -> about 57 of 60 resolvable beams; best SNR via EMS1: median -44.1 dB, 0 users >= 0 dB; best phase steps used: -174..180 deg/element
+EMS2: 1951 users without LoS, azimuth 5-95% range -83..75 deg (sin -0.99..0.97) -> about 59 of 60 resolvable beams; best SNR via EMS2: median -45.7 dB, 0 users >= 0 dB; best phase steps used: -132..174 deg/element
