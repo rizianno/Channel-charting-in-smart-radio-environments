@@ -191,7 +191,8 @@ for gdB = gdBs
 end
 
 T = cell2table(rows, 'VariableNames', {'gain_dB','scheme','R','sweeps','group','n_users', ...
-    'dsnr_median_dB','dsnr_mean_dB','snr_median_dB','se_mean','dse_mean','coverage_0dB','coverage_m10dB'});
+    'dsnr_median_dB','dsnr_mean_dB','snr_median_dB','se_mean','dse_mean','coverage_0dB','coverage_m10dB', ...
+    'dsnr_p10_dB','snr_p10_dB'});
 outDir = fullfile(root,'results_aoa','serving_sweeps', nz0.name);
 if ~exist(outDir,'dir'), mkdir(outDir); end
 writetable(T, fullfile(outDir,'summary.csv'));
@@ -277,12 +278,13 @@ function sel = lut_physics(az, specular, step)
 end
 
 function r = collect(gdB, scheme, R, s, snr, base, grp)
-    r = cell(size(grp,1), 13);
+    r = cell(size(grp,1), 15);
     for g = 1:size(grp,1)
         m = grp{g,2};  x = snr(m);  b = base(m);
         d = 10*log10(x ./ b);  d = d(isfinite(d));
         r(g,:) = {gdB, scheme, R, s, grp{g,1}, nnz(m), median(d), mean(d), median(10*log10(x)), ...
-                  mean(log2(1+x)), mean(log2(1+x) - log2(1+b)), 100*mean(x >= 1), 100*mean(x >= 0.1)};
+                  mean(log2(1+x)), mean(log2(1+x) - log2(1+b)), 100*mean(x >= 1), 100*mean(x >= 0.1), ...
+                  prctile(d,10), prctile(10*log10(x(x > 0)),10)};
     end
 end
 
