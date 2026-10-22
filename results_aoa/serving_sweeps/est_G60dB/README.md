@@ -1,6 +1,6 @@
 # EMS beam selection vs number of sweeps (noise `est_G60dB`)
 
-Generated 2026-10-22 15:42 by `experiments/Main_AoA_Serving_Sweeps.m` (branch aoa-serving), runtime 31 min.
+Generated 2026-10-22 16:05 by `experiments/Main_AoA_Serving_Sweeps.m` (branch aoa-serving), runtime 2 min.
 
 ## Codebook from the beamwidth
 - 60 elements along the steering axis at lambda/2 -> aperture 30 lambda (0.30 m at 30 GHz). Half-power beamwidth in sin(theta): 0.886 lambda / D = 0.0295 (1.7 deg near the normal, 3.4 deg at 60 deg).
