@@ -21,7 +21,11 @@
 % Selection by measurement uses each EMS path's own gain (spatially separated at the BS),
 % noise-free; t-SNE uses estimated channels (SRV_NOISE); the served SNR uses the true channel.
 %
-% Environment: SRV_NOISE (est_G60dB), SRV_SIZES ("60r,60,120,180,240"; "60r" = ray-traced),
+% SRV_POP = nolos ("banana experiment"): the same, but the population (charts, anchors, scores)
+% is every user WITHOUT LoS: reflection only (BS link only via a wall; direct-channel power
+% more than 36 dB below free space) plus full NLOS. Their BS channel is then part of both the
+% t-SNE input and the served SNR. Outputs in results_aoa/serving_banana/<noise>/.
+% Environment: SRV_POP (fullnlos | nolos), SRV_NOISE (est_G60dB), SRV_SIZES ("60r,60,120,180,240"; "60r" = ray-traced),
 %   SRV_KS ("1:8"), SRV_RS ("2,4,6"), SRV_SMAX (40), SRV_WORKERS (48)
 % Outputs: results_aoa/serving_nlos_size/<noise>/ (README.md, summary.csv, validation.csv, figures)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -48,13 +52,20 @@ k0   = 2*pi/(3e8/30e9);  d = (3e8/30e9)/2;
 Data = load_dataset(params);
 U    = abl_users(Data, params);
 Nb = params.Par.Tx.ArrSize;  Nr = size(Data.H_LOS_1bounce,3);  M0 = params.M;
-nlos = find(~U.has_direct);                                  % full NLOS users
+pop  = envs('SRV_POP','fullnlos');
+lamc = 3e8/30e9;
+Pd   = squeeze(sum(sum(abs(Data.H_LOS_1bounce).^2,2),3)) / (Nb*Nr);
+dd   = sqrt(sum(([U.xy, params.UE_height*ones(U.n,1)] - U.BS_position).^2, 2));
+los  = U.has_direct & 10*log10(Pd ./ (lamc./(4*pi*dd)).^2) > -36;
+if strcmp(pop,'nolos'), nlos = find(~los); else, nlos = find(~U.has_direct); end   % population
 nU   = numel(nlos);
+isNone = ~U.has_direct(nlos);                                % full NLOS within the population
+Hd   = reshape(permute(double(Data.H_LOS_1bounce(nlos,:,:)),[2 3 1]), Nb*Nr, nU);   % zero for full NLOS
 xyz  = [U.xy(nlos,:), params.UE_height*ones(nU,1)];
 rho  = 10^((nz.tx_dBm - nz.noise_dBm)/10);
 azBS = compute_ems_azimuth(U.BS_position(1:2), U.EMS_position, params);
 specular = -azBS;
-fprintf('Full-NLOS users: %d\n', nU);
+fprintf('Population %s: %d users (full NLOS %d, reflection only %d)\n', pop, nU, nnz(isNone), nnz(~isNone));
 
 % orientation of the element grid (m axis along +-y, n axis along +-z) and fitted model
 fit = struct();  val = {};
@@ -151,12 +162,16 @@ for sz = sizes
     clear C
     Gown = cellfun(@(Ae) gain_all(Ae, Nb, Nr), A, 'UniformOutput', false);
     lmax = @(H) lam_max(H, Nb, Nr);
-    snrOf = @(i1, i2) rho * lmax(pick(A{1}, i1) + pick(A{2}, i2));
+    snrOf = @(i1, i2) rho * lmax(Hd + pick(A{1}, i1) + pick(A{2}, i2));
     base  = snrOf(repmat(N/2,nU,1), repmat(N/2,nU,1));
     [e1, e2] = deal(repmat(1:N,nU,1));  [i1, i2] = best_of(Gown, {e1, e2});
     exh = snrOf(i1, i2);
     ok = scored & (exh(:) > 0);
-    grp = {'full NLOS, reachable', ok; 'reachable by both EMSs', ok & all(reachE,2); 'reachable by one EMS', ok & xor(reachE(:,1), reachE(:,2))};
+    grp = {'full NLOS, reachable', ok & isNone; 'reachable by both EMSs', ok & isNone & all(reachE,2); ...
+           'reachable by one EMS', ok & isNone & xor(reachE(:,1), reachE(:,2))};
+    if strcmp(pop,'nolos')
+        grp = [grp; {'reflection only, reachable', ok & ~isNone; 'no LoS (all), reachable', ok}];
+    end
     sel = @(cand) best_of(Gown, cand);
     add = @(rows, scheme, R, s, snr) [rows; collect(tag, M, N, scheme, R, s, snr, base, grp)];
     rows = add(rows, 'baseline', 0, 0, base);
@@ -175,13 +190,14 @@ for sz = sizes
     rows = add(rows, 'true AoA + LUT', 0, 0, snrOf(lutT(:,1), lutT(:,2)));
 
     % ---- t-SNE training charts: per EMS, features of the full-NLOS users
-    cacheFile = fullfile(root,'cache_ablations', sprintf('nlos_size_%s_%s.mat', nz.name, tag));
+    ctag = tag;  if strcmp(pop,'nolos'), ctag = ['nolos_' tag]; end
+    cacheFile = fullfile(root,'cache_ablations', sprintf('nlos_size_%s_%s.mat', nz.name, ctag));
     Rmap = load_cache(cacheFile);
     Ptr  = unique(cell2mat(arrayfun(@(K) spread(K).', Ks, 'UniformOutput', false).'), 'stable');
     todo = {};
     for i = Ptr.'
         for e = 1:2
-            key = sprintf('%s|%s|e%d|%d', nz.name, tag, e, i);
+            key = sprintf('%s|%s|e%d|%d', nz.name, ctag, e, i);
             if ~isKey(Rmap, key), todo(end+1,:) = {key, i, e}; end %#ok<SAGROW>
         end
     end
@@ -192,8 +208,8 @@ for sz = sizes
         while nx <= size(todo,1) && numel(futs) < 2*nW
             [key, i, e] = todo{nx,:};  nx = nx + 1;
             if ~isKey(Fcache, i)
-                H = A{1}(:,:,i) + A{2}(:,:,i);                       % both EMSs on training entry i
-                Fcache(i) = logcov_features(reshape(H, Nb, Nr, nU), sprintf('%s|%d', tag, i), nz, params);
+                H = Hd + A{1}(:,:,i) + A{2}(:,:,i);                  % both EMSs on training entry i
+                Fcache(i) = logcov_features(reshape(H, Nb, Nr, nU), sprintf('%s|%d', ctag, i), nz, params);
             end
             F = Fcache(i);  ch = charts(e);
             D = squareform(pdist(F(ch.users,:)));
@@ -214,8 +230,8 @@ for sz = sizes
     for K = Ks
         tr = spread(K);  azHat = nan(nU,2);  diverged = 0;
         for e = 1:2
-            outs = Rmap(sprintf('%s|%s|e%d|%d', nz.name, tag, e, tr(1)));
-            for s = 2:numel(tr), outs(s) = Rmap(sprintf('%s|%s|e%d|%d', nz.name, tag, e, tr(s))); end
+            outs = Rmap(sprintf('%s|%s|e%d|%d', nz.name, ctag, e, tr(1)));
+            for s = 2:numel(tr), outs(s) = Rmap(sprintf('%s|%s|e%d|%d', nz.name, ctag, e, tr(s))); end
             E3 = cat(3, outs.est);  ch = charts(e);
             if numel(tr) == 1, est = E3; else, [~, est] = abl_fuse(E3, [outs.q_free], ch.nA, ch.labels); end
             diverged = max(diverged, mean(abs(est) > 180));
@@ -243,12 +259,18 @@ end
 T = cell2table(rows, 'VariableNames', {'surface','M','N','scheme','R','sweeps','group','n_users', ...
     'dsnr_median_dB','dsnr_mean_dB','dsnr_p10_dB','snr_median_dB','snr_p10_dB','se_mean','dse_mean'});
 outDir = fullfile(root,'results_aoa','serving_nlos_size', nz.name);
+if strcmp(pop,'nolos'), outDir = fullfile(root,'results_aoa','serving_banana', nz.name); end
 if ~exist(outDir,'dir'), mkdir(outDir); end
 writetable(T, fullfile(outDir,'summary.csv'));
 V = cell2table(vrows, 'VariableNames', {'surface','note'});  writetable(V, fullfile(outDir,'validation_and_aoa.csv'));
-for sz = unique(T.surface,'stable').', plot_sweeps(T(strcmp(T.surface,sz{1}),:), sz{1}, Rs, outDir); end
+for sz = unique(T.surface,'stable').'
+    plot_sweeps(T(strcmp(T.surface,sz{1}),:), sz{1}, Rs, outDir, 'full NLOS, reachable');
+    if strcmp(pop,'nolos')
+        plot_sweeps(T(strcmp(T.surface,sz{1}),:), sz{1}, Rs, outDir, 'reflection only, reachable');
+    end
+end
 plot_sizes(T, outDir);
-write_readme(outDir, T, V, val, fit, charts, nU, nz, Ks, Rs, toc(t0)/60);
+write_readme(outDir, T, V, val, fit, charts, nU, nz, Ks, Rs, toc(t0)/60, pop, nnz(isNone));
 fprintf('\n=== DONE (%.1f min) ===\n', toc(t0)/60);
 
 
@@ -421,10 +443,9 @@ function save_cache(file, R)
     save(file, 'keys', 'vals', '-v7.3');
 end
 
-function plot_sweeps(T, tag, Rs, outDir)
+function plot_sweeps(T, tag, Rs, outDir, grp)
     met = {'dsnr_median_dB','median SNR gain vs zero phase [dB]'; 'dsnr_p10_dB','10th percentile SNR gain [dB] (worst 10%)'; ...
            'snr_median_dB','median SNR [dB]'};
-    grp = 'full NLOS, reachable';
     blues = [0.30 0.75 0.93; 0.00 0.45 0.74; 0.00 0.20 0.45];  orng = [1.00 0.75 0.40; 0.95 0.55 0.15; 0.70 0.30 0.00];
     f = figure('Position',[50 50 1800 480]);
     tl = tiledlayout(f, 1, size(met,1), 'TileSpacing','compact');
@@ -447,8 +468,10 @@ function plot_sweeps(T, tag, Rs, outDir)
         xlim(ax, [0 40]);  xlabel(ax,'number of sweeps');  ylabel(ax, met{k,2});
         if k == size(met,1), legend(ax,'Location','eastoutside','FontSize',8); end
     end
-    title(tl, sprintf('Full-NLOS users, surface %s (codebook %d entries)', strrep(tag,'_','\_'), T.N(1)));
-    exportgraphics(f, fullfile(outDir, sprintf('sweeps_%s.png', tag)), 'Resolution',110);  close(f);
+    title(tl, sprintf('%s users, surface %s (codebook %d entries)', grp, strrep(tag,'_','\_'), T.N(1)));
+    fn = sprintf('sweeps_%s.png', tag);
+    if ~startsWith(grp,'full'), fn = strrep(sprintf('sweeps_%s_%s.png', tag, strtok(grp,',')), ' ', '_'); end
+    exportgraphics(f, fullfile(outDir, fn), 'Resolution',110);  close(f);
 end
 
 function plot_sizes(T, outDir)
@@ -472,13 +495,22 @@ function plot_sizes(T, outDir)
     exportgraphics(f, fullfile(outDir,'sizes_comparison.png'), 'Resolution',110);  close(f);
 end
 
-function write_readme(outDir, T, V, val, fit, charts, nU, nz, Ks, Rs, runtime)
-    L = {sprintf('# Full-NLOS users: EMS beam selection vs number of sweeps, surfaces 60..240 (noise `%s`)', nz.name), '', ...
+function write_readme(outDir, T, V, val, fit, charts, nU, nz, Ks, Rs, runtime, pop, nNone)
+    if strcmp(pop,'nolos')
+        ttl = sprintf('# Banana experiment: charts from all users WITHOUT LoS, beam selection vs number of sweeps (noise `%s`)', nz.name);
+        who = sprintf(['- **Users (banana):** every user without LoS (%d): reflection only (%d, BS link only via a wall: direct-channel power more than 36 dB below free space) ' ...
+                       'and full NLOS (%d, no BS-UE channel). Their BS channel is part of the t-SNE input and of the served SNR. The full-NLOS results compare directly with results_aoa/serving_nlos_size (charts from full-NLOS users only) and results_aoa/serving_sweeps (charts from all users).'], nU, nU - nNone, nNone);
+    else
+        ttl = sprintf('# Full-NLOS users: EMS beam selection vs number of sweeps, surfaces 60..240 (noise `%s`)', nz.name);
+        who = sprintf('- **Users:** full NLOS = no BS-UE channel at all (%d users); the EMSs are their only link.', nU);
+    end
+    L = {ttl, '', ...
          sprintf('Generated %s by `experiments/Main_AoA_Serving_NLoS_Size.m` (branch aoa-serving), runtime %.0f min.', ...
                  char(datetime('now','Format','yyyy-MM-dd HH:mm')), runtime), '', ...
          '## Setup', ...
-         sprintf('- **Users:** full NLOS = no BS-UE channel at all (%d users); the EMSs are their only link. t-SNE: one 1-D chart per EMS with the full-NLOS users it reaches (EMS1: %d users, %d anchors, perplexity %d; EMS2: %d, %d, %d). Scored: reachable by at least one EMS and anchor in neither chart.', ...
-                 nU, numel(charts(1).users), charts(1).nA, charts(1).perp, numel(charts(2).users), charts(2).nA, charts(2).perp), ...
+         who, ...
+         sprintf('- **t-SNE:** one 1-D chart per EMS with the users of this population it reaches (EMS1: %d users, %d anchors, perplexity %d; EMS2: %d, %d, %d). Scored: reachable by at least one EMS and anchor in neither chart.', ...
+                 numel(charts(1).users), charts(1).nA, charts(1).perp, numel(charts(2).users), charts(2).nA, charts(2).perp), ...
          '- **Surfaces:** M x M elements, lambda/2, steering along one axis only (vertical: same phase on every column). `M60_raytraced` = the dataset; `M60/120/180/240` = synthesized with spherical waves from the UE, EMS and BS positions, per-user strengths fitted on the 60 x 60 data. Codebook from the beamwidth: N = 68/136/204/272.', ...
          sprintf('- **Schemes vs number of sweeps:** sequential, spread, hierarchical (4 spread entries, then halving), spread + R neighbours, t-SNE AoA + LUT (K = %s spread training sweeps, both EMSs on the same entry), t-SNE + LUT entry + R neighbours (R = %s), exhaustive (N), true AoA + LUT.', mat2str(Ks), mat2str(Rs)), ...
          '- Measurement-based selection uses each EMS path''s own gain (noise-free, in favour of the sweeping baselines); the served SNR uses the true channel; 23 dBm, -92 dBm.', '', ...
