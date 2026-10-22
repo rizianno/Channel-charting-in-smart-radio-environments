@@ -100,6 +100,11 @@ for i1 = 1:N
 end
 snr_base = rho * lmax(Hd + A{1}(:,:,N/2) + A{2}(:,:,N/2));
 snr_full = rho * best_full;
+% users with no channel at all (no direct path, no EMS path in any configuration) cannot be
+% served by any scheme: they are excluded from the scores and counted in the README
+noLink = ~(snr_full > 0);
+unl = unl & ~noLink(:);
+fprintf('Users without any channel (excluded): %d\n', nnz(noLink));
 
 % EMS-path gain of every entry (for the data look-up table and its calibration)
 gainE = cellfun(@(Ae) squeeze(lam_max_stack(Ae, Nb, Nr)), A, 'UniformOutput', false);   % U x N
@@ -198,7 +203,7 @@ for nzName = noises
     writetable(T, fullfile(outDir,'summary.csv'));
     plot_trends(T, modes, outDir, nz.name);
     plot_cdfs(cdfData, groups, outDir, nz.name);
-    write_readme(outDir, nz, T, modes, Ks, N, step, train, U, ch, specular, toc(t0)/60);
+    write_readme(outDir, nz, T, modes, Ks, N, step, train, U, ch, specular, toc(t0)/60, nnz(noLink));
 end
 fprintf('\n=== DONE (%.1f min) ===\n', toc(t0)/60);
 
@@ -260,6 +265,7 @@ end
 
 function s = link_stats(snr, base)
     d = 10*log10(snr ./ base);
+    d = d(isfinite(d));          % (a zero-phase SNR of exactly 0 would give an infinite gain)
     s = [median(10*log10(snr)), mean(10*log10(snr)), mean(log2(1+snr)), 100*mean(snr >= 1), ...
          100*mean(snr >= 10), median(d), mean(d), prctile(d,10), mean(log2(1+snr) - log2(1+base))];
 end
@@ -338,7 +344,7 @@ function plot_cdfs(C, groups, outDir, nzName)
     end
 end
 
-function write_readme(outDir, nz, T, modes, Ks, N, step, train, U, ch, specular, runtime)
+function write_readme(outDir, nz, T, modes, Ks, N, step, train, U, ch, specular, runtime, nNoLink)
     L = {sprintf('# Serving with AoA estimated from few EMS acquisitions (noise `%s`)', nz.name), '', ...
          sprintf('Generated %s by `experiments/Main_AoA_Serving.m` (branch aoa-serving), runtime %.0f min.', ...
                  char(datetime('now','Format','yyyy-MM-dd HH:mm')), runtime), '', ...
@@ -352,7 +358,7 @@ function write_readme(outDir, nz, T, modes, Ks, N, step, train, U, ch, specular,
          '- **Look-up tables (angle -> entry, per EMS):** `physics` = steering law with the known BS direction; `data` = majority best entry of the 7 anchors with the closest true angle (offline calibration with the labelled users).', ...
          '- **Link:** uplink, 23 dBm, noise -92 dBm, best rank-1 beamforming: SNR = P/N0 * lambda_max(H''H) with the TRUE channel H = direct + EMS1 + EMS2. SE = log2(1 + SNR). Coverage = share of users with SNR >= 0 dB (also 10 dB in the CSV).', ...
          '- **Compared schemes:** `baseline` (zero phase on both EMSs), `best_training` (best of the training configurations measured for the user, no angle estimation), `proposed_*` (t-SNE AoA + LUT), `genie_*` (true AoA + LUT: the cost of the angle error), `full_sweep` (best of all N^2 configurations, upper bound).', ...
-         '- **Scored users:** unlabelled users only; groups: all, in front of both surfaces, without a direct path.', ''};
+         sprintf('- **Scored users:** unlabelled users with a non-zero channel in at least one configuration (%d users have no channel at all and cannot be served by any scheme); groups: all, in front of both surfaces, without a direct path.', nNoLink), ''};
     for m = modes
         L{end+1} = sprintf('## Mode `%s`: median SNR gain vs baseline [dB] / mean SE [bit/s/Hz] / coverage SNR>=0 dB [%%]', m{1}); %#ok<AGROW>
         for g = unique(T.group,'stable').'
