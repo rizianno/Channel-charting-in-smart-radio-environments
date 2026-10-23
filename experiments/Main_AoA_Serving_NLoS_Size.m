@@ -27,7 +27,12 @@
 % t-SNE input and the served SNR. Outputs in results_aoa/serving_banana/<noise>/.
 % SRV_TRAIN = same (default): training sweep k sets both EMSs to training entry k (K sweeps);
 %           = grid: both EMSs stepped independently over the K training entries (K^2 sweeps).
-% Environment: SRV_TRAIN (same | grid), SRV_POP (fullnlos | nolos), SRV_NOISE (est_G60dB), SRV_SIZES ("60r,60,120,180,240"; "60r" = ray-traced),
+% SRV_TRAIN = apple: the BS filters toward each EMS (each EMS->BS channel is rank one, direction
+%           a_e known), so every acquisition gives the received power through EMS1 and through
+%           EMS2 separately (estimated channels, same noise model); both EMSs step together over
+%           the K training entries (K acquisitions, pairing irrelevant). Per EMS, the K log-powers
+%           are stacked into one feature and give ONE chart (no fusion of K charts).
+% Environment: SRV_TRAIN (same | grid | apple), SRV_POP (fullnlos | nolos), SRV_NOISE (est_G60dB), SRV_SIZES ("60r,60,120,180,240"; "60r" = ray-traced),
 %   SRV_KS ("1:8"), SRV_RS ("2,4,6"), SRV_SMAX (40), SRV_WORKERS (48)
 % Outputs: results_aoa/serving_nlos_size/<noise>/ (README.md, summary.csv, validation.csv, figures)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -196,7 +201,12 @@ for sz = sizes
     ctag = tag;  if strcmp(pop,'nolos'), ctag = ['nolos_' tag]; end
     cacheFile = fullfile(root,'cache_ablations', sprintf('nlos_size_%s_%s.mat', nz.name, ctag));
     Rmap = load_cache(cacheFile);
+    if strcmp(train,'apple')
+        [Rmap, nCh] = apple_charts(Rmap, cacheFile, Ks, spread, A, Hd, fit, charts, nz, ctag, tag, params, pool, nW, Nb, Nr, nU);
+        fprintf('  apple: %d charts computed (%.1f min)\n', nCh, toc(t0)/60);
+    end
     trainPairs = @(K) pairs_of(spread(K), train);              % [entry EMS1, entry EMS2] per sweep
+    if strcmp(train,'apple'), trainPairs = @(K) zeros(0,2); end                % (no per-pair charts)
     Ptr  = unique(cell2mat(arrayfun(@(K) trainPairs(K), Ks, 'UniformOutput', false).'), 'rows', 'stable');
     todo = {};
     for q = 1:size(Ptr,1)
@@ -236,15 +246,21 @@ for sz = sizes
     for K = Ks
         Pk = trainPairs(K);  azHat = nan(nU,2);  diverged = 0;
         for e = 1:2
-            outs = Rmap(pair_key(nz.name, ctag, e, Pk(1,:)));
-            for s = 2:size(Pk,1), outs(s) = Rmap(pair_key(nz.name, ctag, e, Pk(s,:))); end
-            E3 = cat(3, outs.est);  ch = charts(e);
-            if size(Pk,1) == 1, est = E3; else, [~, est] = abl_fuse(E3, [outs.q_free], ch.nA, ch.labels); end
+            ch = charts(e);
+            if strcmp(train,'apple')
+                o = Rmap(sprintf('%s|%s|apple|e%d|K%d', nz.name, ctag, e, K));  est = o.est;
+            else
+                outs = Rmap(pair_key(nz.name, ctag, e, Pk(1,:)));
+                for s = 2:size(Pk,1), outs(s) = Rmap(pair_key(nz.name, ctag, e, Pk(s,:))); end
+                E3 = cat(3, outs.est);
+                if size(Pk,1) == 1, est = E3; else, [~, est] = abl_fuse(E3, [outs.q_free], ch.nA, ch.labels); end
+            end
             diverged = max(diverged, mean(abs(est) > 180));
             azHat(ch.users, e) = est;
         end
         lut = lut_physics(azHat, specular, step);
         nK  = size(Pk,1);                                            % training sweeps used
+        if strcmp(train,'apple'), nK = numel(spread(K)); end
         rows = add(rows, 'tsne', 0, nK, snrOf(lut(:,1), lut(:,2)));
         for R = Rs
             [i1, i2] = sel({nbr(lut(:,1), R, N, true), nbr(lut(:,2), R, N, true)});
@@ -272,6 +288,7 @@ T = cell2table(rows, 'VariableNames', {'surface','M','N','scheme','R','sweeps','
     'dsnr_median_dB','dsnr_mean_dB','dsnr_p10_dB','snr_median_dB','snr_p10_dB','se_mean','dse_mean'});
 fold = 'serving_nlos_size';  if strcmp(pop,'nolos'), fold = 'serving_banana'; end
 if strcmp(train,'grid'), fold = [fold '_gridTraining']; end
+if strcmp(train,'apple'), fold = [fold '_appleTraining']; end
 outDir = fullfile(root,'results_aoa', fold, nz.name);
 if ~exist(outDir,'dir'), mkdir(outDir); end
 writetable(T, fullfile(outDir,'summary.csv'));
@@ -403,6 +420,63 @@ function [i1, i2] = hierarchical(Gown, N, s, spread)
     [i1, i2] = out{:};
 end
 
+function [Rmap, nCh] = apple_charts(Rmap, cacheFile, Ks, spread, A, Hd, fit, charts, nz, ctag, tag, params, pool, nW, Nb, Nr, nU)
+% apple training: per EMS, log received power through that EMS (BS filtered toward it) for every
+% training entry, then one chart per (EMS, K) from the K stacked log-powers
+    ent = unique(cell2mat(arrayfun(@(K) spread(K), Ks, 'UniformOutput', false)));
+    LP  = {nan(nU, max(ent)), nan(nU, max(ent))};
+    for i = ent
+        H = reshape(Hd + A{1}(:,:,i) + A{2}(:,:,i), Nb, Nr, nU);        % both EMSs on entry i
+        for e = 1:2
+            LP{e}(:,i) = apple_logpower(H, fit(e).a, sprintf('%s|apple|%d|e%d', ctag, i, e), nz, params);
+        end
+    end
+    futs = parallel.FevalFuture.empty;  fk = {};  nCh = 0;
+    for K = Ks
+        for e = 1:2
+            key = sprintf('%s|%s|apple|e%d|K%d', nz.name, ctag, e, K);
+            if isKey(Rmap, key), continue; end
+            ch = charts(e);
+            X  = LP{e}(ch.users, spread(K));
+            D  = squareform(pdist(X));
+            futs(end+1) = parfeval(pool, @abl_chart, 1, D, ch.labels, ch.nA, true(numel(ch.users),1), ...
+                                   ch.perp, params.K_fraction); %#ok<AGROW>
+            fk{end+1} = key; %#ok<AGROW>
+        end
+    end
+    while ~isempty(futs)
+        [j, out] = fetchNext(futs);
+        Rmap(fk{j}) = out;  futs(j) = [];  fk(j) = [];  nCh = nCh + 1;
+    end
+    save_cache(cacheFile, Rmap);
+end
+
+function lp = apple_logpower(H, a, key, noise, params)
+% log of the estimated received power through one EMS: BS combining with its direction a (unit
+% norm), N_real snapshots of the estimated channel H g_r + E_r (as logcov_features), sampled
+% exactly: (1/N) (|| ||g|| a'H + f ||^2 + W), f ~ CN(0, se2) (1 x Nr), W ~ se2 Gamma(Nr (N-1), 1)
+    [~, Nr, nU] = size(H);
+    key = [key '|' noise.name];
+    rs  = RandStream('mt19937ar', 'Seed', mod(sum(double(key).*(1:numel(key))), 2^31-2) + 1);
+    sn2 = 10^((noise.noise_dBm - noise.tx_dBm)/10);
+    noisy = ~isnan(noise.pilot_gain_dB);
+    if noisy, se2 = sn2 / 10^(noise.pilot_gain_dB/10); end
+    flo = 2*sn2;  if isfield(noise,'floor_abs') && ~isnan(noise.floor_abs), flo = noise.floor_abs; end
+    Nre = params.N_real;  lp = zeros(nU,1);
+    for u = 1:nU
+        h  = a' * H(:,:,u);                                  % 1 x Nr
+        v  = randn(rs, 2*Nre, 1);  g2 = sum(v.^2)/2;
+        if noisy
+            f = sqrt(se2/2) * complex(randn(rs,1,Nr), randn(rs,1,Nr));
+            W = se2 * sum(randn(rs, 2*Nr*(Nre-1), 1).^2) / 2;
+            p = (norm(sqrt(g2)*h + f)^2 + W) / Nre;
+        else
+            p = (g2/Nre) * norm(h)^2 + flo;
+        end
+        lp(u) = log(p);
+    end
+end
+
 function P = pairs_of(tr, mode)
 % training sweeps: [entry of EMS1, entry of EMS2] per sweep
     if strcmp(mode,'grid'), [a, b] = ndgrid(tr, tr); P = [a(:) b(:)];
@@ -416,7 +490,9 @@ function k = pair_key(nzName, ctag, e, pr)
 end
 
 function t = trtxt(train)
-    if strcmp(train,'grid'), t = 'K x K grid: both EMSs stepped independently, K^2 training sweeps';
+    if strcmp(train,'apple'), t = ['apple: BS filters toward each EMS, per-EMS received power of each of the K ' ...
+                                   'acquisitions stacked into one chart per EMS (no fusion), K training sweeps'];
+    elseif strcmp(train,'grid'), t = 'K x K grid: both EMSs stepped independently, K^2 training sweeps';
     else, t = 'sweep k sets both EMSs to training entry k, K training sweeps'; end
 end
 
