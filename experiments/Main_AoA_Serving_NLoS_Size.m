@@ -25,7 +25,9 @@
 % is every user WITHOUT LoS: reflection only (BS link only via a wall; direct-channel power
 % more than 36 dB below free space) plus full NLOS. Their BS channel is then part of both the
 % t-SNE input and the served SNR. Outputs in results_aoa/serving_banana/<noise>/.
-% Environment: SRV_POP (fullnlos | nolos), SRV_NOISE (est_G60dB), SRV_SIZES ("60r,60,120,180,240"; "60r" = ray-traced),
+% SRV_TRAIN = same (default): training sweep k sets both EMSs to training entry k (K sweeps);
+%           = grid: both EMSs stepped independently over the K training entries (K^2 sweeps).
+% Environment: SRV_TRAIN (same | grid), SRV_POP (fullnlos | nolos), SRV_NOISE (est_G60dB), SRV_SIZES ("60r,60,120,180,240"; "60r" = ray-traced),
 %   SRV_KS ("1:8"), SRV_RS ("2,4,6"), SRV_SMAX (40), SRV_WORKERS (48)
 % Outputs: results_aoa/serving_nlos_size/<noise>/ (README.md, summary.csv, validation.csv, figures)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -53,6 +55,7 @@ Data = load_dataset(params);
 U    = abl_users(Data, params);
 Nb = params.Par.Tx.ArrSize;  Nr = size(Data.H_LOS_1bounce,3);  M0 = params.M;
 pop  = envs('SRV_POP','fullnlos');
+train = envs('SRV_TRAIN','same');
 lamc = 3e8/30e9;
 Pd   = squeeze(sum(sum(abs(Data.H_LOS_1bounce).^2,2),3)) / (Nb*Nr);
 dd   = sqrt(sum(([U.xy, params.UE_height*ones(U.n,1)] - U.BS_position).^2, 2));
@@ -193,25 +196,28 @@ for sz = sizes
     ctag = tag;  if strcmp(pop,'nolos'), ctag = ['nolos_' tag]; end
     cacheFile = fullfile(root,'cache_ablations', sprintf('nlos_size_%s_%s.mat', nz.name, ctag));
     Rmap = load_cache(cacheFile);
-    Ptr  = unique(cell2mat(arrayfun(@(K) spread(K).', Ks, 'UniformOutput', false).'), 'stable');
+    trainPairs = @(K) pairs_of(spread(K), train);              % [entry EMS1, entry EMS2] per sweep
+    Ptr  = unique(cell2mat(arrayfun(@(K) trainPairs(K), Ks, 'UniformOutput', false).'), 'rows', 'stable');
     todo = {};
-    for i = Ptr.'
+    for q = 1:size(Ptr,1)
         for e = 1:2
-            key = sprintf('%s|%s|e%d|%d', nz.name, ctag, e, i);
-            if ~isKey(Rmap, key), todo(end+1,:) = {key, i, e}; end %#ok<SAGROW>
+            key = pair_key(nz.name, ctag, e, Ptr(q,:));
+            if ~isKey(Rmap, key), todo(end+1,:) = {key, Ptr(q,:), e}; end %#ok<SAGROW>
         end
     end
-    fprintf('  %d training entries, %d charts to compute\n', numel(Ptr), size(todo,1));
-    Fcache = containers.Map('KeyType','double','ValueType','any');
+    fprintf('  %d training configurations (%s), %d charts to compute\n', size(Ptr,1), train, size(todo,1));
+    Fcache = containers.Map();
     futs = parallel.FevalFuture.empty;  fk = {};  nx = 1;  done = 0;
     while nx <= size(todo,1) || ~isempty(futs)
         while nx <= size(todo,1) && numel(futs) < 2*nW
-            [key, i, e] = todo{nx,:};  nx = nx + 1;
-            if ~isKey(Fcache, i)
-                H = Hd + A{1}(:,:,i) + A{2}(:,:,i);                  % both EMSs on training entry i
-                Fcache(i) = logcov_features(reshape(H, Nb, Nr, nU), sprintf('%s|%d', ctag, i), nz, params);
+            [key, pr, e] = todo{nx,:};  nx = nx + 1;
+            fkey = sprintf('%d_%d', pr);
+            if ~isKey(Fcache, fkey)
+                H = Hd + A{1}(:,:,pr(1)) + A{2}(:,:,pr(2));          % EMS1 on entry pr(1), EMS2 on pr(2)
+                if pr(1) == pr(2), skey = sprintf('%s|%d', ctag, pr(1)); else, skey = sprintf('%s|%d_%d', ctag, pr); end
+                Fcache(fkey) = logcov_features(reshape(H, Nb, Nr, nU), skey, nz, params);
             end
-            F = Fcache(i);  ch = charts(e);
+            F = Fcache(fkey);  ch = charts(e);
             D = squareform(pdist(F(ch.users,:)));
             futs(end+1) = parfeval(pool, @abl_chart, 1, D, ch.labels, ch.nA, true(numel(ch.users),1), ...
                                    ch.perp, params.K_fraction); %#ok<SAGROW>
@@ -228,17 +234,17 @@ for sz = sizes
 
     % ---- t-SNE AoA -> LUT (-> refinement)
     for K = Ks
-        tr = spread(K);  azHat = nan(nU,2);  diverged = 0;
+        Pk = trainPairs(K);  azHat = nan(nU,2);  diverged = 0;
         for e = 1:2
-            outs = Rmap(sprintf('%s|%s|e%d|%d', nz.name, ctag, e, tr(1)));
-            for s = 2:numel(tr), outs(s) = Rmap(sprintf('%s|%s|e%d|%d', nz.name, ctag, e, tr(s))); end
+            outs = Rmap(pair_key(nz.name, ctag, e, Pk(1,:)));
+            for s = 2:size(Pk,1), outs(s) = Rmap(pair_key(nz.name, ctag, e, Pk(s,:))); end
             E3 = cat(3, outs.est);  ch = charts(e);
-            if numel(tr) == 1, est = E3; else, [~, est] = abl_fuse(E3, [outs.q_free], ch.nA, ch.labels); end
+            if size(Pk,1) == 1, est = E3; else, [~, est] = abl_fuse(E3, [outs.q_free], ch.nA, ch.labels); end
             diverged = max(diverged, mean(abs(est) > 180));
             azHat(ch.users, e) = est;
         end
         lut = lut_physics(azHat, specular, step);
-        nK  = numel(tr);
+        nK  = size(Pk,1);                                            % training sweeps used
         rows = add(rows, 'tsne', 0, nK, snrOf(lut(:,1), lut(:,2)));
         for R = Rs
             [i1, i2] = sel({nbr(lut(:,1), R, N, true), nbr(lut(:,2), R, N, true)});
@@ -253,8 +259,8 @@ for sz = sizes
         err = mod(azHat - U.az(nlos,:) + 180, 360) - 180;
         r1 = reachE(:,1) & ~isAnch(:,1);  r2 = reachE(:,2) & ~isAnch(:,2);
         offb = [mean(cdist(lut(r1,1), lutT(r1,1), N) > 1), mean(cdist(lut(r2,2), lutT(r2,2), N) > 1)];
-        vrows(end+1,:) = {tag, sprintf('K=%d: AoA median |err| %.1f/%.1f deg, RMSE %.1f/%.1f; LUT >1 beam off %.0f%%/%.0f%%; diverged %.1f%%', ...
-            nK, median(abs(err(r1,1))), median(abs(err(r2,2))), sqrt(mean(err(r1,1).^2)), sqrt(mean(err(r2,2).^2)), ...
+        vrows(end+1,:) = {tag, sprintf('K=%d (%d sweeps): AoA median |err| %.1f/%.1f deg, RMSE %.1f/%.1f; LUT >1 beam off %.0f%%/%.0f%%; diverged %.1f%%', ...
+            K, nK, median(abs(err(r1,1))), median(abs(err(r2,2))), sqrt(mean(err(r1,1).^2)), sqrt(mean(err(r2,2).^2)), ...
             100*offb(1), 100*offb(2), 100*diverged)}; %#ok<SAGROW>
         fprintf('  %s\n', vrows{end,2});
     end
@@ -264,8 +270,9 @@ end
 
 T = cell2table(rows, 'VariableNames', {'surface','M','N','scheme','R','sweeps','group','n_users', ...
     'dsnr_median_dB','dsnr_mean_dB','dsnr_p10_dB','snr_median_dB','snr_p10_dB','se_mean','dse_mean'});
-outDir = fullfile(root,'results_aoa','serving_nlos_size', nz.name);
-if strcmp(pop,'nolos'), outDir = fullfile(root,'results_aoa','serving_banana', nz.name); end
+fold = 'serving_nlos_size';  if strcmp(pop,'nolos'), fold = 'serving_banana'; end
+if strcmp(train,'grid'), fold = [fold '_gridTraining']; end
+outDir = fullfile(root,'results_aoa', fold, nz.name);
 if ~exist(outDir,'dir'), mkdir(outDir); end
 writetable(T, fullfile(outDir,'summary.csv'));
 V = cell2table(vrows, 'VariableNames', {'surface','note'});  writetable(V, fullfile(outDir,'validation_and_aoa.csv'));
@@ -276,7 +283,7 @@ for sz = unique(T.surface,'stable').'
     end
 end
 plot_sizes(T, outDir);
-write_readme(outDir, T, V, val, fit, charts, nU, nz, Ks, Rs, toc(t0)/60, pop, nnz(isNone));
+write_readme(outDir, T, V, val, fit, charts, nU, nz, Ks, Rs, toc(t0)/60, pop, nnz(isNone), train);
 fprintf('\n=== DONE (%.1f min) ===\n', toc(t0)/60);
 
 
@@ -394,6 +401,23 @@ function [i1, i2] = hierarchical(Gown, N, s, spread)
         out{e} = b;
     end
     [i1, i2] = out{:};
+end
+
+function P = pairs_of(tr, mode)
+% training sweeps: [entry of EMS1, entry of EMS2] per sweep
+    if strcmp(mode,'grid'), [a, b] = ndgrid(tr, tr); P = [a(:) b(:)];
+    else, P = [tr(:) tr(:)]; end
+end
+
+function k = pair_key(nzName, ctag, e, pr)
+% cache key of one chart; same-entry sweeps keep the key of the earlier runs (cache reused)
+    if pr(1) == pr(2), k = sprintf('%s|%s|e%d|%d', nzName, ctag, e, pr(1));
+    else, k = sprintf('%s|%s|e%d|%d_%d', nzName, ctag, e, pr(1), pr(2)); end
+end
+
+function t = trtxt(train)
+    if strcmp(train,'grid'), t = 'K x K grid: both EMSs stepped independently, K^2 training sweeps';
+    else, t = 'sweep k sets both EMSs to training entry k, K training sweeps'; end
 end
 
 function [i1, i2] = warm_hier(Gown, lut, N, budget, delta0)
@@ -522,7 +546,7 @@ function plot_sizes(T, outDir)
     exportgraphics(f, fullfile(outDir,'sizes_comparison.png'), 'Resolution',110);  close(f);
 end
 
-function write_readme(outDir, T, V, val, fit, charts, nU, nz, Ks, Rs, runtime, pop, nNone)
+function write_readme(outDir, T, V, val, fit, charts, nU, nz, Ks, Rs, runtime, pop, nNone, train)
     if strcmp(pop,'nolos')
         ttl = sprintf('# Banana experiment: charts from all users WITHOUT LoS, beam selection vs number of sweeps (noise `%s`)', nz.name);
         who = sprintf(['- **Users (banana):** every user without LoS (%d): reflection only (%d, BS link only via a wall: direct-channel power more than 36 dB below free space) ' ...
@@ -539,7 +563,7 @@ function write_readme(outDir, T, V, val, fit, charts, nU, nz, Ks, Rs, runtime, p
          sprintf('- **t-SNE:** one 1-D chart per EMS with the users of this population it reaches (EMS1: %d users, %d anchors, perplexity %d; EMS2: %d, %d, %d). Scored: reachable by at least one EMS and anchor in neither chart.', ...
                  numel(charts(1).users), charts(1).nA, charts(1).perp, numel(charts(2).users), charts(2).nA, charts(2).perp), ...
          '- **Surfaces:** M x M elements, lambda/2, steering along one axis only (vertical: same phase on every column). `M60_raytraced` = the dataset; `M60/120/180/240` = synthesized with spherical waves from the UE, EMS and BS positions, per-user strengths fitted on the 60 x 60 data. Codebook from the beamwidth: N = 68/136/204/272.', ...
-         sprintf('- **Schemes vs number of sweeps:** sequential, spread, hierarchical (4 spread entries, then halving), spread + R neighbours, t-SNE AoA + LUT (K = %s spread training sweeps, both EMSs on the same entry), t-SNE + LUT entry + R neighbours (R = %s), exhaustive (N), true AoA + LUT.', mat2str(Ks), mat2str(Rs)), ...
+         sprintf('- **Schemes vs number of sweeps:** sequential, spread, hierarchical (4 spread entries, then halving), spread + R neighbours, t-SNE AoA + LUT (K = %s spread training entries; %s), t-SNE + LUT entry + R neighbours (R = %s), exhaustive (N), true AoA + LUT.', mat2str(Ks), trtxt(train), mat2str(Rs)), ...
          '- Measurement-based selection uses each EMS path''s own gain (noise-free, in favour of the sweeping baselines); the served SNR uses the true channel; 23 dBm, -92 dBm.', '', ...
          '## Validation of the synthesized channels (60 x 60 vs ray-traced)', ''};
     for i = 1:size(val,1)
