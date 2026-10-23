@@ -43,8 +43,21 @@
 %           first K nested entries (EMS1 entry i, EMS2 entry j, all pairs: K^2 acquisitions), so
 %           every set contains the previous one. Same three per-user fusions (select = main).
 %           Outputs in results_aoa/serving_nlos_size_nestedGridSelection_TEMP/.
-% Environment: SRV_TRAIN (same | grid | apple | nested | nestedgrid), SRV_POP (fullnlos | nolos), SRV_NOISE (est_G60dB), SRV_SIZES ("60r,60,120,180,240"; "60r" = ray-traced),
-%   SRV_KS ("1:8"), SRV_RS ("2,4,6"), SRV_SMAX (40), SRV_WORKERS (48)
+% SRV_TRAIN = informed (TEMPORARY, Asilomar method ii): training entries chosen per EMS from a
+%           prior of the user angles = the anchors' azimuths (sin domain). Greedy coverage: each
+%           new beam covers the most anchors not yet within SRV_FOOT (0.15 in sin, the measured
+%           useful footprint of one training beam) of a chosen beam; once all are covered, the
+%           radius is halved (finer beams inside the clusters only). Slot k sets EMS1 to its k-th
+%           and EMS2 to its k-th entry (K acquisitions); per-user selection (max trustworthiness).
+%         = informedgrid: the K x K grid of the first K informed entries (K^2 acquisitions).
+%         = random (Asilomar method i): per EMS, K entries drawn uniformly from the codebook
+%           (random permutation, nested in K), SRV_DRAWS draws, statistics averaged over draws.
+%           In these three modes the searches are also run cluster-first ([clusters]): restricted
+%           to the support (entries within 2 beamwidths of an anchor), sequential search ordered
+%           by the prior density, hierarchical search and t-SNE refinement within the support.
+%           Outputs in results_aoa/serving_nlos_size_{informed,informedGrid,randomTraining}_TEMP/.
+% Environment: SRV_TRAIN (same | grid | apple | nested | nestedgrid | informed | informedgrid | random), SRV_POP (fullnlos | nolos), SRV_NOISE (est_G60dB), SRV_SIZES ("60r,60,120,180,240"; "60r" = ray-traced),
+%   SRV_KS ("1:8"), SRV_RS ("2,4,6"), SRV_SMAX (40), SRV_WORKERS (48), SRV_FOOT (0.15), SRV_DRAWS (10)
 % Outputs: results_aoa/serving_nlos_size/<noise>/ (README.md, summary.csv, validation.csv, figures)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -62,6 +75,8 @@ Ks   = eval(envs('SRV_KS','1:8'));
 Rs   = str2double(strsplit(envs('SRV_RS','2,4,6'), ','));
 Smax = str2double(envs('SRV_SMAX','40'));
 nW   = str2double(envs('SRV_WORKERS','48'));
+foot = str2double(envs('SRV_FOOT','0.15'));
+nDraw = str2double(envs('SRV_DRAWS','10'));
 k0   = 2*pi/(3e8/30e9);  d = (3e8/30e9)/2;
 
 %% ------------------------------------------------------------------------
@@ -208,12 +223,51 @@ for sz = sizes
     lutT = lut_physics(U.az(nlos,:), specular, step);
     rows = add(rows, 'true AoA + LUT', 0, 0, snrOf(lutT(:,1), lutT(:,2)));
 
+    % ---- prior of the angles (anchors), informed / random training entries, cluster-first searches
+    isInf = any(strcmp(train,{'informed','informedgrid','random'}));
+    if isInf
+        ub  = arrayfun(@(e) mod(sind(specular(e)) + step/180 + 1, 2) - 1, 1:2, 'UniformOutput', false);  % beam (sin)
+        uA  = arrayfun(@(e) sind(charts(e).labels(1:charts(e).nA)), 1:2, 'UniformOutput', false);      % anchors (sin)
+        Sup = cell(1,2);  sq = cell(1,2);  infl = cell(1,2);  rnd = cell(nDraw,2);
+        for e = 1:2
+            near = abs(uA{e} - ub{e});                              % anchors x entries
+            Sup{e} = find(any(near <= 2*wu, 1));                    % support: within 2 beamwidths of an anchor
+            [~, o] = sort(-sum(near(:,Sup{e}) <= wu, 1));           % prior density at each support entry
+            sq{e} = [Sup{e}(o), setdiff(1:N, Sup{e})];              % clusters first, densest first
+            infl{e} = informed_order(uA{e}, ub{e}, foot, max(Ks), max(2, round(0.02*numel(uA{e}))));
+            for dI = 1:nDraw, rnd{dI,e} = randperm(RandStream('mt19937ar','Seed',1000*dI + e), N, max(Ks)); end
+            fprintf('  EMS%d: support %d of %d entries; informed entries %s -> beams %s deg\n', e, numel(Sup{e}), N, ...
+                    mat2str(infl{e}), mat2str(round(asind(ub{e}(infl{e})))));
+        end
+        [i1, i2] = sel({repmat(Sup{1},nU,1), repmat(Sup{2},nU,1)});
+        rows = add(rows, 'exhaustive[clusters]', 0, max(numel(Sup{1}), numel(Sup{2})), snrOf(i1,i2));
+        for s = 1:Smax
+            [i1, i2] = sel({repmat(sq{1}(1:min(s,N)),nU,1), repmat(sq{2}(1:min(s,N)),nU,1)});  rows = add(rows, 'sequential[clusters]', 0, s, snrOf(i1,i2));
+            [i1, i2] = hier_sub(Gown, Sup, s);                                                rows = add(rows, 'hierarchical[clusters]', 0, s, snrOf(i1,i2));
+        end
+    end
+
     % ---- t-SNE training charts: per EMS, features of the full-NLOS users
     ctag = tag;  if strcmp(pop,'nolos'), ctag = ['nolos_' tag]; end
     cacheFile = fullfile(root,'cache_ablations', sprintf('nlos_size_%s_%s.mat', nz.name, ctag));
     if strcmp(train,'nested'), cacheFile = fullfile(root,'cache_ablations', sprintf('nested_%s_%s.mat', nz.name, ctag)); end
     if strcmp(train,'nestedgrid'), cacheFile = fullfile(root,'cache_ablations', sprintf('nestedgrid_%s_%s.mat', nz.name, ctag)); end
+    if isInf, cacheFile = fullfile(root,'cache_ablations', sprintf('pairs_%s_%s.mat', nz.name, ctag)); end
     Rmap = load_cache(cacheFile);
+    if isInf                                                        % reuse nested / nested-grid charts, then all pairs needed
+        for f = {'nested','nestedgrid'}
+            Rn = load_cache(fullfile(root,'cache_ablations', sprintf('%s_%s_%s.mat', f{1}, nz.name, ctag)));
+            for k = Rn.keys, if ~isKey(Rmap, k{1}), Rmap(k{1}) = Rn(k{1}); end, end
+        end
+        clear Rn
+        switch train
+            case 'informed',     Pall = [infl{1}(:) infl{2}(:)];
+            case 'informedgrid', [ga, gb] = ndgrid(infl{1}, infl{2});  Pall = [ga(:) gb(:)];
+            case 'random',       Pall = cell2mat(arrayfun(@(dI) [rnd{dI,1}(:) rnd{dI,2}(:)], (1:nDraw).', 'UniformOutput', false));
+        end
+        [Rmap, nCh] = pair_charts(Rmap, cacheFile, unique(Pall,'rows','stable'), A, Hd, charts, nz, ctag, params, pool, nW, Nb, Nr, nU);
+        fprintf('  %s: %d charts computed (%.1f min)\n', train, nCh, toc(t0)/60);
+    end
     if strcmp(train,'nestedgrid')                                   % reuse the same-entry nested charts
         Rn = load_cache(fullfile(root,'cache_ablations', sprintf('nested_%s_%s.mat', nz.name, ctag)));
         for k = Rn.keys, if ~isKey(Rmap, k{1}), Rmap(k{1}) = Rn(k{1}); end, end
@@ -231,7 +285,7 @@ for sz = sizes
         fprintf('  apple: %d charts computed (%.1f min)\n', nCh, toc(t0)/60);
     end
     trainPairs = @(K) pairs_of(spread(K), train);              % [entry EMS1, entry EMS2] per sweep
-    if any(strcmp(train,{'apple','nested','nestedgrid'})), trainPairs = @(K) zeros(0,2); end   % (no per-pair charts)
+    if any(strcmp(train,{'apple','nested','nestedgrid'})) || isInf, trainPairs = @(K) zeros(0,2); end   % (no per-pair charts)
     Ptr  = unique(cell2mat(arrayfun(@(K) trainPairs(K), Ks, 'UniformOutput', false).'), 'rows', 'stable');
     todo = {};
     for q = 1:size(Ptr,1)
@@ -269,6 +323,48 @@ for sz = sizes
 
     % ---- t-SNE AoA -> LUT (-> refinement)
     for K = Ks
+        if isInf                                                    % informed / random training, per-user selection
+            r1 = reachE(:,1) & ~isAnch(:,1);  r2 = reachE(:,2) & ~isAnch(:,2);
+            nD = 1;  if strcmp(train,'random'), nD = nDraw; end
+            rr = {};  ae = zeros(nD, 4);
+            for dI = 1:nD
+                switch train
+                    case 'informed',     Pn = [infl{1}(1:K).', infl{2}(1:K).'];
+                    case 'informedgrid', [ga, gb] = ndgrid(infl{1}(1:K), infl{2}(1:K));  Pn = [ga(:) gb(:)];
+                    case 'random',       Pn = [rnd{dI,1}(1:K).', rnd{dI,2}(1:K).'];
+                end
+                nAcq = size(Pn,1);  az = nan(nU,2);
+                for e = 1:2
+                    ch = charts(e);
+                    outs = Rmap(nkey(nz.name, ctag, e, Pn(1,:)));
+                    for s = 2:nAcq, outs(s) = Rmap(nkey(nz.name, ctag, e, Pn(s,:))); end
+                    [~, ~, az(ch.users,e)] = fuse_variants([outs.est], [outs.tw], [outs.ct], ch.nA, ch.labels);
+                end
+                lut = lut_physics(az, specular, step);
+                lpos = cell(1,2);                                   % LUT entry snapped to the support
+                for e = 1:2, [~, lpos{e}] = min(abs(ub{e}(lut(:,e)).' - ub{e}(Sup{e})), [], 2); end
+                rr = add(rr, 'tsne[select]', 0, nAcq, snrOf(lut(:,1), lut(:,2)));
+                for R = Rs
+                    [i1, i2] = sel({nbr(lut(:,1), R, N, true), nbr(lut(:,2), R, N, true)});
+                    rr = add(rr, 'tsne+refine[select]', R, nAcq + R + 1, snrOf(i1, i2));
+                    [i1, i2] = sel({Sup{1}(nbr(lpos{1}, R, numel(Sup{1}), true)), Sup{2}(nbr(lpos{2}, R, numel(Sup{2}), true))});
+                    rr = add(rr, 'tsne+refine[select,clusters]', R, nAcq + R + 1, snrOf(i1, i2));
+                end
+                for b = 1:(Smax - nAcq)
+                    [i1, i2] = warm_hier(Gown, lut, N, b, round(N/8));
+                    rr = add(rr, 'tsne+hierarchical[select]', K, nAcq + b, snrOf(i1, i2));
+                    [i1, i2] = warm_sub(Gown, Sup, lpos, b);
+                    rr = add(rr, 'tsne+hierarchical[select,clusters]', K, nAcq + b, snrOf(i1, i2));
+                end
+                err = mod(az - U.az(nlos,:) + 180, 360) - 180;
+                ae(dI,:) = [median(abs(err(r1,1))), median(abs(err(r2,2))), sqrt(mean(err(r1,1).^2)), sqrt(mean(err(r2,2).^2))];
+            end
+            rows = [rows; avg_draws(rr, nD)]; %#ok<AGROW>
+            vrows(end+1,:) = {tag, sprintf('K=%d (%d acq) select%s: AoA median |err| %.1f/%.1f deg, RMSE %.1f/%.1f', K, nAcq, ...
+                repmat(sprintf(', mean of %d draws', nD), 1, nD > 1), mean(ae,1))}; %#ok<SAGROW>
+            fprintf('  %s\n', vrows{end,2});
+            continue
+        end
         if any(strcmp(train,{'nested','nestedgrid'}))               % three fusions of the nested set
             ent = nestOrd(1:K);
             if strcmp(train,'nestedgrid'), [ga, gb] = ndgrid(ent, ent); Pn = [ga(:) gb(:)]; else, Pn = [ent(:) ent(:)]; end
@@ -347,6 +443,9 @@ if strcmp(train,'grid'), fold = [fold '_gridTraining']; end
 if strcmp(train,'apple'), fold = [fold '_appleTraining']; end
 if strcmp(train,'nested'), fold = [fold '_nestedFusion_TEMP']; end
 if strcmp(train,'nestedgrid'), fold = [fold '_nestedGridSelection_TEMP']; end
+if strcmp(train,'informed'), fold = [fold '_informed_TEMP']; end
+if strcmp(train,'informedgrid'), fold = [fold '_informedGrid_TEMP']; end
+if strcmp(train,'random'), fold = [fold '_randomTraining_TEMP']; end
 outDir = fullfile(root,'results_aoa', fold, nz.name);
 if ~exist(outDir,'dir'), mkdir(outDir); end
 writetable(T, fullfile(outDir,'summary.csv'));
@@ -521,7 +620,12 @@ end
 
 function [Rmap, nCh] = nestedgrid_charts(Rmap, cacheFile, ent, A, Hd, charts, nz, ctag, params, pool, nW, Nb, Nr, nU)
 % one chart per (pair of nested entries, EMS): EMS1 on entry i, EMS2 on entry j; label-free TW/CT
-    [ga, gb] = ndgrid(ent, ent);  P = [ga(:) gb(:)];
+    [ga, gb] = ndgrid(ent, ent);
+    [Rmap, nCh] = pair_charts(Rmap, cacheFile, [ga(:) gb(:)], A, Hd, charts, nz, ctag, params, pool, nW, Nb, Nr, nU);
+end
+
+function [Rmap, nCh] = pair_charts(Rmap, cacheFile, P, A, Hd, charts, nz, ctag, params, pool, nW, Nb, Nr, nU)
+% one chart per (pair P(q,:), EMS): EMS1 on entry P(q,1), EMS2 on entry P(q,2); label-free TW/CT
     futs = parallel.FevalFuture.empty;  fk = {};  nCh = 0;
     for q = 1:size(P,1)
         pr = P(q,:);
@@ -545,6 +649,63 @@ function [Rmap, nCh] = nestedgrid_charts(Rmap, cacheFile, ent, A, Hd, charts, nz
         if mod(nCh, 50) == 0, save_cache(cacheFile, Rmap); end
     end
     save_cache(cacheFile, Rmap);
+end
+
+function o = informed_order(uA, ub, F, Kmax, minA)
+% PDF-informed training entries of one EMS: greedy coverage of the anchors' directions uA (sin).
+% Each new entry covers the most anchors not yet within radius r of a chosen beam (ties: the one
+% closest to them); entries covering fewer than minA new anchors are skipped. When every anchor is
+% covered, r is halved (finer beams inside the clusters). r starts at F (useful footprint).
+    o = [];  r = F;
+    while numel(o) < Kmax && r > 1e-3
+        cov = false(numel(uA),1);
+        if ~isempty(o), cov = any(abs(uA - ub(o)) <= r, 2); end
+        while numel(o) < Kmax
+            unc = find(~cov);
+            if numel(unc) < minA, break; end
+            dd = abs(uA(unc) - ub);  inR = dd <= r;  cnt = sum(inR,1);  cnt(o) = -1;
+            if max(cnt) < minA, break; end
+            cand = find(cnt == max(cnt));
+            md = arrayfun(@(c) mean(dd(inR(:,c),c)), cand);
+            [~, j] = min(md);  c = cand(j);
+            o(end+1) = c;  cov(unc(inR(:,c))) = true; %#ok<AGROW>
+        end
+        r = r/2;
+    end
+    if numel(o) < Kmax                                      % (not expected) fill: nearest to an anchor
+        [~, k] = sort(min(abs(uA - ub), [], 1));  k = setdiff(k, o, 'stable');  o = [o, k(1:Kmax-numel(o))];
+    end
+end
+
+function [i1, i2] = hier_sub(Gown, Sup, s)
+% hierarchical search restricted to each EMS's support (its entries treated as one codebook)
+    out = cell(1,2);
+    for e = 1:2
+        g = Gown{e}(:, Sup{e});  Ns = numel(Sup{e});
+        spr = @(k) unique(round((2*(1:k) - 1) * Ns / (2*k)));
+        b = hierarchical({g, g}, Ns, s, spr);  out{e} = Sup{e}(b);  out{e} = out{e}(:);
+    end
+    [i1, i2] = out{:};
+end
+
+function [i1, i2] = warm_sub(Gown, Sup, lpos, budget)
+% t-SNE warm-started hierarchical search within each EMS's support (lpos = LUT position in it)
+    out = cell(1,2);
+    for e = 1:2
+        g = Gown{e}(:, Sup{e});  Ns = numel(Sup{e});
+        b = warm_hier({g, g}, [lpos{e} lpos{e}], Ns, budget, max(1, round(Ns/8)));  out{e} = Sup{e}(b);  out{e} = out{e}(:);
+    end
+    [i1, i2] = out{:};
+end
+
+function out = avg_draws(rr, nD)
+% rows of nD random draws -> one row per (scheme, R, sweeps, group), statistics averaged
+    if nD == 1, out = rr; return; end
+    key = strcat(rr(:,4), '|', cellfun(@num2str, rr(:,5), 'UniformOutput', false), '|', ...
+                 cellfun(@num2str, rr(:,6), 'UniformOutput', false), '|', rr(:,7));
+    [u, ia, ic] = unique(key, 'stable');
+    out = rr(ia,:);  X = cell2mat(rr(:,9:15));
+    for j = 1:numel(u), out(j,9:15) = num2cell(mean(X(ic==j,:), 1, 'omitnan')); end
 end
 
 function [a, s, x] = fuse_variants(E, QT, QC, nA, lab)
@@ -661,6 +822,9 @@ function t = trtxt(train)
     if strcmp(train,'apple'), t = ['apple: BS filters toward each EMS, per-EMS received power of each of the K ' ...
                                    'acquisitions stacked into one chart per EMS (no fusion), K training sweeps'];
     elseif strcmp(train,'grid'), t = 'K x K grid: both EMSs stepped independently, K^2 training sweeps';
+    elseif strcmp(train,'informed'), t = 'PDF-informed entries per EMS (greedy coverage of the anchors'' angles), slot k = k-th entry of each EMS, K training sweeps, per-user selection';
+    elseif strcmp(train,'informedgrid'), t = 'K x K grid of the first K PDF-informed entries of each EMS, K^2 training sweeps, per-user selection';
+    elseif strcmp(train,'random'), t = 'K entries per EMS drawn uniformly from the codebook, averaged over random draws, K training sweeps, per-user selection';
     else, t = 'sweep k sets both EMSs to training entry k, K training sweeps'; end
 end
 
