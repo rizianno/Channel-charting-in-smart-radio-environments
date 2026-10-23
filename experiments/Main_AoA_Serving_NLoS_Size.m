@@ -39,7 +39,11 @@
 %           trustworthiness minus its minimum over the charts (the worst chart gets weight 0),
 %           select = the chart with the highest trustworthiness.
 %           Outputs in results_aoa/serving_nlos_size_nestedFusion_TEMP/.
-% Environment: SRV_TRAIN (same | grid | apple | nested), SRV_POP (fullnlos | nolos), SRV_NOISE (est_G60dB), SRV_SIZES ("60r,60,120,180,240"; "60r" = ray-traced),
+% SRV_TRAIN = nestedgrid (TEMPORARY): as nested, but each training set is the K x K grid of the
+%           first K nested entries (EMS1 entry i, EMS2 entry j, all pairs: K^2 acquisitions), so
+%           every set contains the previous one. Same three per-user fusions (select = main).
+%           Outputs in results_aoa/serving_nlos_size_nestedGridSelection_TEMP/.
+% Environment: SRV_TRAIN (same | grid | apple | nested | nestedgrid), SRV_POP (fullnlos | nolos), SRV_NOISE (est_G60dB), SRV_SIZES ("60r,60,120,180,240"; "60r" = ray-traced),
 %   SRV_KS ("1:8"), SRV_RS ("2,4,6"), SRV_SMAX (40), SRV_WORKERS (48)
 % Outputs: results_aoa/serving_nlos_size/<noise>/ (README.md, summary.csv, validation.csv, figures)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -208,7 +212,15 @@ for sz = sizes
     ctag = tag;  if strcmp(pop,'nolos'), ctag = ['nolos_' tag]; end
     cacheFile = fullfile(root,'cache_ablations', sprintf('nlos_size_%s_%s.mat', nz.name, ctag));
     if strcmp(train,'nested'), cacheFile = fullfile(root,'cache_ablations', sprintf('nested_%s_%s.mat', nz.name, ctag)); end
+    if strcmp(train,'nestedgrid'), cacheFile = fullfile(root,'cache_ablations', sprintf('nestedgrid_%s_%s.mat', nz.name, ctag)); end
     Rmap = load_cache(cacheFile);
+    if strcmp(train,'nestedgrid')                                   % reuse the same-entry nested charts
+        Rn = load_cache(fullfile(root,'cache_ablations', sprintf('nested_%s_%s.mat', nz.name, ctag)));
+        for k = Rn.keys, if ~isKey(Rmap, k{1}), Rmap(k{1}) = Rn(k{1}); end, end
+        nestOrd = nest_order(N);
+        [Rmap, nCh] = nestedgrid_charts(Rmap, cacheFile, nestOrd(1:max(Ks)), A, Hd, charts, nz, ctag, params, pool, nW, Nb, Nr, nU);
+        fprintf('  nestedgrid: %d charts computed, entries %s (%.1f min)\n', nCh, mat2str(nestOrd(1:max(Ks))), toc(t0)/60);
+    end
     if strcmp(train,'nested')
         nestOrd = nest_order(N);
         [Rmap, nCh] = nested_charts(Rmap, cacheFile, nestOrd(1:max(Ks)), A, Hd, charts, nz, ctag, params, pool, nW, Nb, Nr, nU);
@@ -219,7 +231,7 @@ for sz = sizes
         fprintf('  apple: %d charts computed (%.1f min)\n', nCh, toc(t0)/60);
     end
     trainPairs = @(K) pairs_of(spread(K), train);              % [entry EMS1, entry EMS2] per sweep
-    if any(strcmp(train,{'apple','nested'})), trainPairs = @(K) zeros(0,2); end   % (no per-pair charts)
+    if any(strcmp(train,{'apple','nested','nestedgrid'})), trainPairs = @(K) zeros(0,2); end   % (no per-pair charts)
     Ptr  = unique(cell2mat(arrayfun(@(K) trainPairs(K), Ks, 'UniformOutput', false).'), 'rows', 'stable');
     todo = {};
     for q = 1:size(Ptr,1)
@@ -257,30 +269,32 @@ for sz = sizes
 
     % ---- t-SNE AoA -> LUT (-> refinement)
     for K = Ks
-        if strcmp(train,'nested')                                   % three fusions of the nested set
+        if any(strcmp(train,{'nested','nestedgrid'}))               % three fusions of the nested set
             ent = nestOrd(1:K);
+            if strcmp(train,'nestedgrid'), [ga, gb] = ndgrid(ent, ent); Pn = [ga(:) gb(:)]; else, Pn = [ent(:) ent(:)]; end
+            nAcq = size(Pn,1);
             AZ = struct('avg', nan(nU,2), 'sharp', nan(nU,2), 'select', nan(nU,2));
             for e = 1:2
                 ch = charts(e);
-                outs = Rmap(sprintf('%s|%s|nest|e%d|%d', nz.name, ctag, e, ent(1)));
-                for s = 2:K, outs(s) = Rmap(sprintf('%s|%s|nest|e%d|%d', nz.name, ctag, e, ent(s))); end
+                outs = Rmap(nkey(nz.name, ctag, e, Pn(1,:)));
+                for s = 2:nAcq, outs(s) = Rmap(nkey(nz.name, ctag, e, Pn(s,:))); end
                 [fa, fs, fx] = fuse_variants([outs.est], [outs.tw], [outs.ct], ch.nA, ch.labels);
                 AZ.avg(ch.users,e) = fa;  AZ.sharp(ch.users,e) = fs;  AZ.select(ch.users,e) = fx;
             end
             r1 = reachE(:,1) & ~isAnch(:,1);  r2 = reachE(:,2) & ~isAnch(:,2);
             for fv = {'avg','sharp','select'}
                 lut = lut_physics(AZ.(fv{1}), specular, step);
-                rows = add(rows, ['tsne[' fv{1} ']'], 0, K, snrOf(lut(:,1), lut(:,2)));
+                rows = add(rows, ['tsne[' fv{1} ']'], 0, nAcq, snrOf(lut(:,1), lut(:,2)));
                 for R = Rs
                     [i1, i2] = sel({nbr(lut(:,1), R, N, true), nbr(lut(:,2), R, N, true)});
-                    rows = add(rows, ['tsne+refine[' fv{1} ']'], R, K + R + 1, snrOf(i1, i2));
+                    rows = add(rows, ['tsne+refine[' fv{1} ']'], R, nAcq + R + 1, snrOf(i1, i2));
                 end
-                for b = 1:(Smax - K)
+                for b = 1:(Smax - nAcq)
                     [i1, i2] = warm_hier(Gown, lut, N, b, round(N/8));
-                    rows = add(rows, ['tsne+hierarchical[' fv{1} ']'], K, K + b, snrOf(i1, i2));
+                    rows = add(rows, ['tsne+hierarchical[' fv{1} ']'], K, nAcq + b, snrOf(i1, i2));
                 end
                 err = mod(AZ.(fv{1}) - U.az(nlos,:) + 180, 360) - 180;
-                vrows(end+1,:) = {tag, sprintf('K=%d %s: AoA median |err| %.1f/%.1f deg, RMSE %.1f/%.1f', K, fv{1}, ...
+                vrows(end+1,:) = {tag, sprintf('K=%d (%d acq) %s: AoA median |err| %.1f/%.1f deg, RMSE %.1f/%.1f', K, nAcq, fv{1}, ...
                     median(abs(err(r1,1))), median(abs(err(r2,2))), sqrt(mean(err(r1,1).^2)), sqrt(mean(err(r2,2).^2)))}; %#ok<SAGROW>
                 fprintf('  %s\n', vrows{end,2});
             end
@@ -332,6 +346,7 @@ fold = 'serving_nlos_size';  if strcmp(pop,'nolos'), fold = 'serving_banana'; en
 if strcmp(train,'grid'), fold = [fold '_gridTraining']; end
 if strcmp(train,'apple'), fold = [fold '_appleTraining']; end
 if strcmp(train,'nested'), fold = [fold '_nestedFusion_TEMP']; end
+if strcmp(train,'nestedgrid'), fold = [fold '_nestedGridSelection_TEMP']; end
 outDir = fullfile(root,'results_aoa', fold, nz.name);
 if ~exist(outDir,'dir'), mkdir(outDir); end
 writetable(T, fullfile(outDir,'summary.csv'));
@@ -343,7 +358,7 @@ for sz = unique(T.surface,'stable').'
     end
 end
 plot_sizes(T, outDir);
-if strcmp(train,'nested'), plot_nested(T, outDir); end
+if any(strcmp(train,{'nested','nestedgrid'})), plot_nested(T, outDir); end
 write_readme(outDir, T, V, val, fit, charts, nU, nz, Ks, Rs, toc(t0)/60, pop, nnz(isNone), train);
 fprintf('\n=== DONE (%.1f min) ===\n', toc(t0)/60);
 
@@ -498,6 +513,40 @@ function [Rmap, nCh] = nested_charts(Rmap, cacheFile, ent, A, Hd, charts, nz, ct
     save_cache(cacheFile, Rmap);
 end
 
+function k = nkey(nzName, ctag, e, pr)
+% chart key: same-entry pairs reuse the nested charts, other pairs are nested-grid charts
+    if pr(1) == pr(2), k = sprintf('%s|%s|nest|e%d|%d', nzName, ctag, e, pr(1));
+    else, k = sprintf('%s|%s|ngrid|e%d|%d_%d', nzName, ctag, e, pr(1), pr(2)); end
+end
+
+function [Rmap, nCh] = nestedgrid_charts(Rmap, cacheFile, ent, A, Hd, charts, nz, ctag, params, pool, nW, Nb, Nr, nU)
+% one chart per (pair of nested entries, EMS): EMS1 on entry i, EMS2 on entry j; label-free TW/CT
+    [ga, gb] = ndgrid(ent, ent);  P = [ga(:) gb(:)];
+    futs = parallel.FevalFuture.empty;  fk = {};  nCh = 0;
+    for q = 1:size(P,1)
+        pr = P(q,:);
+        need = arrayfun(@(e) ~isKey(Rmap, nkey(nz.name, ctag, e, pr)), 1:2);
+        if ~any(need), continue; end
+        H = reshape(Hd + A{1}(:,:,pr(1)) + A{2}(:,:,pr(2)), Nb, Nr, nU);
+        if pr(1) == pr(2), skey = sprintf('%s|%d', ctag, pr(1)); else, skey = sprintf('%s|%d_%d', ctag, pr); end
+        F = logcov_features(H, skey, nz, params);
+        for e = find(need)
+            ch = charts(e);
+            D  = squareform(pdist(F(ch.users,:)));
+            futs(end+1) = parfeval(pool, @srv_chart_twct, 1, D, ch.labels, ch.nA, ch.perp, params.K_fraction); %#ok<AGROW>
+            fk{end+1} = nkey(nz.name, ctag, e, pr); %#ok<AGROW>
+        end
+        while numel(futs) >= 2*nW
+            [j, out] = fetchNext(futs);  Rmap(fk{j}) = out;  futs(j) = [];  fk(j) = [];  nCh = nCh + 1;
+        end
+    end
+    while ~isempty(futs)
+        [j, out] = fetchNext(futs);  Rmap(fk{j}) = out;  futs(j) = [];  fk(j) = [];  nCh = nCh + 1;
+        if mod(nCh, 50) == 0, save_cache(cacheFile, Rmap); end
+    end
+    save_cache(cacheFile, Rmap);
+end
+
 function [a, s, x] = fuse_variants(E, QT, QC, nA, lab)
 % per-user fusion of K charts (E, QT = trustworthiness, QC = continuity: n x K, label-free)
 %   avg    : earlier rule, weights = continuity / sum
@@ -531,7 +580,7 @@ function plot_nested(T, outDir)
                 q = sortrows(T(m,:), 'sweeps');
                 plot(ax, q.sweeps, q.(met{k,1}), sch{s,4}, 'Color',sch{s,3}, 'LineWidth',1.6, 'MarkerSize',4, 'DisplayName', sch{s,2});
             end
-            xlim(ax, [0 25]); xlabel(ax,'number of sweeps'); ylabel(ax, met{k,2});
+            xlim(ax, [0 min(70, max(T.sweeps(startsWith(T.scheme,'tsne[')))) + 5]); xlabel(ax,'number of sweeps'); ylabel(ax, met{k,2});
             if k == 2, legend(ax,'Location','eastoutside','FontSize',8); end
         end
         title(tl, sprintf('TEMPORARY nested fusion, full-NLOS users, surface %s', strrep(tags{t},'_','\_')));
