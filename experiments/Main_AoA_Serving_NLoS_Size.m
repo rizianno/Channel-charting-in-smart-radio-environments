@@ -32,7 +32,14 @@
 %           EMS2 separately (estimated channels, same noise model); both EMSs step together over
 %           the K training entries (K acquisitions, pairing irrelevant). Per EMS, the K log-powers
 %           are stacked into one feature and give ONE chart (no fusion of K charts).
-% Environment: SRV_TRAIN (same | grid | apple), SRV_POP (fullnlos | nolos), SRV_NOISE (est_G60dB), SRV_SIZES ("60r,60,120,180,240"; "60r" = ray-traced),
+% SRV_TRAIN = nested (TEMPORARY): same-entry training sweeps taken in a nested, ever-finer spread
+%           order (zero phase, 180 deg, +-90 deg, quarter points, ...), so the set for K+1 is the
+%           set for K plus one entry; charts store label-free trustworthiness AND continuity, and
+%           three fusions are compared (per user): avg = earlier rule (continuity / sum), sharp =
+%           trustworthiness minus its minimum over the charts (the worst chart gets weight 0),
+%           select = the chart with the highest trustworthiness.
+%           Outputs in results_aoa/serving_nlos_size_nestedFusion_TEMP/.
+% Environment: SRV_TRAIN (same | grid | apple | nested), SRV_POP (fullnlos | nolos), SRV_NOISE (est_G60dB), SRV_SIZES ("60r,60,120,180,240"; "60r" = ray-traced),
 %   SRV_KS ("1:8"), SRV_RS ("2,4,6"), SRV_SMAX (40), SRV_WORKERS (48)
 % Outputs: results_aoa/serving_nlos_size/<noise>/ (README.md, summary.csv, validation.csv, figures)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -200,13 +207,19 @@ for sz = sizes
     % ---- t-SNE training charts: per EMS, features of the full-NLOS users
     ctag = tag;  if strcmp(pop,'nolos'), ctag = ['nolos_' tag]; end
     cacheFile = fullfile(root,'cache_ablations', sprintf('nlos_size_%s_%s.mat', nz.name, ctag));
+    if strcmp(train,'nested'), cacheFile = fullfile(root,'cache_ablations', sprintf('nested_%s_%s.mat', nz.name, ctag)); end
     Rmap = load_cache(cacheFile);
+    if strcmp(train,'nested')
+        nestOrd = nest_order(N);
+        [Rmap, nCh] = nested_charts(Rmap, cacheFile, nestOrd(1:max(Ks)), A, Hd, charts, nz, ctag, params, pool, nW, Nb, Nr, nU);
+        fprintf('  nested: %d charts computed, order %s (%.1f min)\n', nCh, mat2str(nestOrd(1:max(Ks))), toc(t0)/60);
+    end
     if strcmp(train,'apple')
         [Rmap, nCh] = apple_charts(Rmap, cacheFile, Ks, spread, A, Hd, fit, charts, nz, ctag, tag, params, pool, nW, Nb, Nr, nU);
         fprintf('  apple: %d charts computed (%.1f min)\n', nCh, toc(t0)/60);
     end
     trainPairs = @(K) pairs_of(spread(K), train);              % [entry EMS1, entry EMS2] per sweep
-    if strcmp(train,'apple'), trainPairs = @(K) zeros(0,2); end                % (no per-pair charts)
+    if any(strcmp(train,{'apple','nested'})), trainPairs = @(K) zeros(0,2); end   % (no per-pair charts)
     Ptr  = unique(cell2mat(arrayfun(@(K) trainPairs(K), Ks, 'UniformOutput', false).'), 'rows', 'stable');
     todo = {};
     for q = 1:size(Ptr,1)
@@ -244,6 +257,35 @@ for sz = sizes
 
     % ---- t-SNE AoA -> LUT (-> refinement)
     for K = Ks
+        if strcmp(train,'nested')                                   % three fusions of the nested set
+            ent = nestOrd(1:K);
+            AZ = struct('avg', nan(nU,2), 'sharp', nan(nU,2), 'select', nan(nU,2));
+            for e = 1:2
+                ch = charts(e);
+                outs = Rmap(sprintf('%s|%s|nest|e%d|%d', nz.name, ctag, e, ent(1)));
+                for s = 2:K, outs(s) = Rmap(sprintf('%s|%s|nest|e%d|%d', nz.name, ctag, e, ent(s))); end
+                [fa, fs, fx] = fuse_variants([outs.est], [outs.tw], [outs.ct], ch.nA, ch.labels);
+                AZ.avg(ch.users,e) = fa;  AZ.sharp(ch.users,e) = fs;  AZ.select(ch.users,e) = fx;
+            end
+            r1 = reachE(:,1) & ~isAnch(:,1);  r2 = reachE(:,2) & ~isAnch(:,2);
+            for fv = {'avg','sharp','select'}
+                lut = lut_physics(AZ.(fv{1}), specular, step);
+                rows = add(rows, ['tsne[' fv{1} ']'], 0, K, snrOf(lut(:,1), lut(:,2)));
+                for R = Rs
+                    [i1, i2] = sel({nbr(lut(:,1), R, N, true), nbr(lut(:,2), R, N, true)});
+                    rows = add(rows, ['tsne+refine[' fv{1} ']'], R, K + R + 1, snrOf(i1, i2));
+                end
+                for b = 1:(Smax - K)
+                    [i1, i2] = warm_hier(Gown, lut, N, b, round(N/8));
+                    rows = add(rows, ['tsne+hierarchical[' fv{1} ']'], K, K + b, snrOf(i1, i2));
+                end
+                err = mod(AZ.(fv{1}) - U.az(nlos,:) + 180, 360) - 180;
+                vrows(end+1,:) = {tag, sprintf('K=%d %s: AoA median |err| %.1f/%.1f deg, RMSE %.1f/%.1f', K, fv{1}, ...
+                    median(abs(err(r1,1))), median(abs(err(r2,2))), sqrt(mean(err(r1,1).^2)), sqrt(mean(err(r2,2).^2)))}; %#ok<SAGROW>
+                fprintf('  %s\n', vrows{end,2});
+            end
+            continue
+        end
         Pk = trainPairs(K);  azHat = nan(nU,2);  diverged = 0;
         for e = 1:2
             ch = charts(e);
@@ -289,6 +331,7 @@ T = cell2table(rows, 'VariableNames', {'surface','M','N','scheme','R','sweeps','
 fold = 'serving_nlos_size';  if strcmp(pop,'nolos'), fold = 'serving_banana'; end
 if strcmp(train,'grid'), fold = [fold '_gridTraining']; end
 if strcmp(train,'apple'), fold = [fold '_appleTraining']; end
+if strcmp(train,'nested'), fold = [fold '_nestedFusion_TEMP']; end
 outDir = fullfile(root,'results_aoa', fold, nz.name);
 if ~exist(outDir,'dir'), mkdir(outDir); end
 writetable(T, fullfile(outDir,'summary.csv'));
@@ -300,6 +343,7 @@ for sz = unique(T.surface,'stable').'
     end
 end
 plot_sizes(T, outDir);
+if strcmp(train,'nested'), plot_nested(T, outDir); end
 write_readme(outDir, T, V, val, fit, charts, nU, nz, Ks, Rs, toc(t0)/60, pop, nnz(isNone), train);
 fprintf('\n=== DONE (%.1f min) ===\n', toc(t0)/60);
 
@@ -418,6 +462,81 @@ function [i1, i2] = hierarchical(Gown, N, s, spread)
         out{e} = b;
     end
     [i1, i2] = out{:};
+end
+
+function o = nest_order(N)
+% nested, ever-finer spread over the codebook: N/2 (zero phase), N (180 deg), N/4, 3N/4, N/8, ...
+    f = [1/2 1];
+    for lev = 2:12
+        f = [f, (1:2:2^lev-1)/2^lev]; %#ok<AGROW>
+        if numel(unique(round(f*N))) >= N, break; end
+    end
+    o = unique(min(max(round(f*N),1),N), 'stable');
+end
+
+function [Rmap, nCh] = nested_charts(Rmap, cacheFile, ent, A, Hd, charts, nz, ctag, params, pool, nW, Nb, Nr, nU)
+% one chart per (training entry, EMS), both EMSs on the same entry; stores label-free TW and CT
+    futs = parallel.FevalFuture.empty;  fk = {};  nCh = 0;
+    for i = ent
+        need = arrayfun(@(e) ~isKey(Rmap, sprintf('%s|%s|nest|e%d|%d', nz.name, ctag, e, i)), 1:2);
+        if ~any(need), continue; end
+        H = reshape(Hd + A{1}(:,:,i) + A{2}(:,:,i), Nb, Nr, nU);
+        F = logcov_features(H, sprintf('%s|%d', ctag, i), nz, params);   % same seed as the same-entry runs
+        for e = find(need)
+            ch = charts(e);
+            D  = squareform(pdist(F(ch.users,:)));
+            futs(end+1) = parfeval(pool, @srv_chart_twct, 1, D, ch.labels, ch.nA, ch.perp, params.K_fraction); %#ok<AGROW>
+            fk{end+1} = sprintf('%s|%s|nest|e%d|%d', nz.name, ctag, e, i); %#ok<AGROW>
+        end
+        while numel(futs) >= 2*nW
+            [j, out] = fetchNext(futs);  Rmap(fk{j}) = out;  futs(j) = [];  fk(j) = [];  nCh = nCh + 1;
+        end
+    end
+    while ~isempty(futs)
+        [j, out] = fetchNext(futs);  Rmap(fk{j}) = out;  futs(j) = [];  fk(j) = [];  nCh = nCh + 1;
+    end
+    save_cache(cacheFile, Rmap);
+end
+
+function [a, s, x] = fuse_variants(E, QT, QC, nA, lab)
+% per-user fusion of K charts (E, QT = trustworthiness, QC = continuity: n x K, label-free)
+%   avg    : earlier rule, weights = continuity / sum
+%   sharp  : weights = trustworthiness - its minimum over the charts (worst chart -> 0) / sum
+%   select : the chart with the highest trustworthiness
+    [n, K] = size(E);
+    if K == 1, a = E; s = E; x = E; return; end
+    W  = max(QC, 1e-6);  W = W ./ sum(W,2);  a = sum(W .* E, 2);
+    Wt = QT - min(QT, [], 2);  z = sum(Wt,2) <= 0;  Wt(z,:) = 1;  Wt = Wt ./ sum(Wt,2);  s = sum(Wt .* E, 2);
+    [~, k] = max(QT, [], 2);  x = E(sub2ind([n K], (1:n).', k));
+    a(1:nA) = lab(1:nA);  s(1:nA) = lab(1:nA);  x(1:nA) = lab(1:nA);
+end
+
+function plot_nested(T, outDir)
+% median and 10th-percentile SNR gain vs sweeps: hierarchical search vs the three fusions
+    grp = 'full NLOS, reachable';  tags = unique(T.surface,'stable');
+    sch = {'hierarchical','hierarchical search',[0.49 0.18 0.56],'-'; ...
+           'tsne[avg]','t-SNE, old fusion (continuity / sum)',[0.6 0.6 0.6],'-o'; ...
+           'tsne[sharp]','t-SNE, new fusion (TW - min)',[0 0.45 0.74],'-o'; ...
+           'tsne[select]','t-SNE, select best-TW chart',[0.30 0.75 0.93],'-s'; ...
+           'tsne+hierarchical[sharp]','t-SNE (new fusion, K = 1) + hierarchical',[0.85 0.33 0.10],'--'};
+    for t = 1:numel(tags)
+        f = figure('Position',[50 50 1400 450]);
+        tl = tiledlayout(f, 1, 2, 'TileSpacing','compact');
+        for k = 1:2
+            met = {'dsnr_median_dB','median SNR gain [dB]'; 'dsnr_p10_dB','10th percentile SNR gain [dB]'};
+            ax = nexttile(tl); hold(ax,'on'); grid(ax,'on'); box(ax,'on');
+            for s = 1:size(sch,1)
+                m = strcmp(T.surface,tags{t}) & strcmp(T.scheme,sch{s,1}) & strcmp(T.group,grp);
+                if contains(sch{s,1},'+hierarchical'), m = m & T.R == 1; end
+                q = sortrows(T(m,:), 'sweeps');
+                plot(ax, q.sweeps, q.(met{k,1}), sch{s,4}, 'Color',sch{s,3}, 'LineWidth',1.6, 'MarkerSize',4, 'DisplayName', sch{s,2});
+            end
+            xlim(ax, [0 25]); xlabel(ax,'number of sweeps'); ylabel(ax, met{k,2});
+            if k == 2, legend(ax,'Location','eastoutside','FontSize',8); end
+        end
+        title(tl, sprintf('TEMPORARY nested fusion, full-NLOS users, surface %s', strrep(tags{t},'_','\_')));
+        exportgraphics(f, fullfile(outDir, sprintf('nested_%s.png', tags{t})), 'Resolution',110);  close(f);
+    end
 end
 
 function [Rmap, nCh] = apple_charts(Rmap, cacheFile, Ks, spread, A, Hd, fit, charts, nz, ctag, tag, params, pool, nW, Nb, Nr, nU)
