@@ -179,13 +179,13 @@ for sz = sizes
     add = @(rows, scheme, R, s, snr) [rows; collect(tag, M, N, scheme, R, s, snr, base, grp)];
     rows = add(rows, 'baseline', 0, 0, base);
     rows = add(rows, 'exhaustive', 0, N, exh);
-    for s = 1:Smax
-        [i1, i2] = sel({repmat(1:s,nU,1), repmat(1:s,nU,1)});        rows = add(rows, 'sequential', 0, s, snrOf(i1,i2));
-        sp = spread(s);  [i1, i2] = sel({repmat(sp,nU,1), repmat(sp,nU,1)});  rows = add(rows, 'spread', 0, s, snrOf(i1,i2));
+    for s = 1:Smax                                                   % beyond N sweeps: = exhaustive
+        [i1, i2] = sel({repmat(1:min(s,N),nU,1), repmat(1:min(s,N),nU,1)});        rows = add(rows, 'sequential', 0, s, snrOf(i1,i2));
+        sp = spread(min(s,N));  [i1, i2] = sel({repmat(sp,nU,1), repmat(sp,nU,1)});  rows = add(rows, 'spread', 0, s, snrOf(i1,i2));
         [i1, i2] = hierarchical(Gown, N, s, spread);                 rows = add(rows, 'hierarchical', 0, s, snrOf(i1,i2));
         for R = Rs
             if s - R < 1, continue; end
-            sp = spread(s - R);  [b1, b2] = sel({repmat(sp,nU,1), repmat(sp,nU,1)});
+            sp = spread(min(s - R, N));  [b1, b2] = sel({repmat(sp,nU,1), repmat(sp,nU,1)});
             [i1, i2] = sel({nbr(b1, R, N), nbr(b2, R, N)});          rows = add(rows, 'spread+refine', R, s, snrOf(i1,i2));
         end
     end
