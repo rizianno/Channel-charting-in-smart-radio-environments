@@ -1,0 +1,22 @@
+AoA error of single-entry charts vs distance of the user from the beam (sin domain, in beamwidths)
+bins: [0 0.5 1 2 3 4 6 8 12 16 24 32 Inf]
+M60_raytraced EMS1 (beamwidth 0.0295 in sin): median |err| per bin [1.4 1.9 7.6 9.4 10.4 7.3 2.8 5.1 9.3 7.4 5.5 5.8] deg
+M60_raytraced EMS1: share |err| < 10 deg per bin [98 86 67 52 47 64 92 76 56 64 77 82]; users per bin [42 42 83 73 95 183 156 339 345 714 1181 307]
+M60_raytraced EMS2 (beamwidth 0.0295 in sin): median |err| per bin [2.3 1.6 3.5 2.4 3 8.4 42.1 51.8 49.3 46.5 8.7 43] deg
+M60_raytraced EMS2: share |err| < 10 deg per bin [91 78 64 66 61 53 41 27 30 31 52 41]; users per bin [219 104 178 147 145 236 398 737 680 1454 1520 442]
+M60 EMS1 (beamwidth 0.0295 in sin): median |err| per bin [4.8 3.1 6.7 4.7 8.7 7.6 3.6 5.6 10.9 6 6.2 5] deg
+M60 EMS1: share |err| < 10 deg per bin [100 98 82 71 66 60 84 75 40 72 72 86]; users per bin [42 42 83 73 95 183 156 339 345 714 1181 307]
+M60 EMS2 (beamwidth 0.0295 in sin): median |err| per bin [2 1.6 3.3 2.3 3 6.4 42.9 52 53.5 46.5 38.8 45.5] deg
+M60 EMS2: share |err| < 10 deg per bin [93 78 71 73 67 60 45 28 29 32 45 33]; users per bin [219 104 178 147 145 236 398 737 680 1454 1520 442]
+M120 EMS1 (beamwidth 0.0148 in sin): median |err| per bin [2.9 2.8 2.7 4.8 7 8.7 8.7 6.1 3 5.1 5.4 6.5] deg
+M120 EMS1: share |err| < 10 deg per bin [86 96 95 79 68 57 53 71 96 83 73 70]; users per bin [22 24 43 47 40 61 91 185 161 336 341 2209]
+M120 EMS2 (beamwidth 0.0148 in sin): median |err| per bin [2.8 4.4 2 2.9 3.4 3 2.8 3.5 38.5 49.5 49 36.7] deg
+M120 EMS2: share |err| < 10 deg per bin [73 67 72 80 71 61 73 64 44 29 30 46]; users per bin [83 72 121 106 96 163 134 278 394 727 720 3366]
+M180 EMS1 (beamwidth 0.0098 in sin): median |err| per bin [0.9 1.1 1.5 3 4.8 7.1 8.7 6.8 9.1 5.1 3.2 6.3] deg
+M180 EMS1: share |err| < 10 deg per bin [100 74 93 96 97 72 61 61 53 79 89 73]; users per bin [13 19 30 26 32 54 33 120 135 212 223 2663]
+M180 EMS2 (beamwidth 0.0098 in sin): median |err| per bin [2.3 1.7 1.6 1.8 2.7 2.5 2.1 2.8 3.9 5.8 47.9 37.7] deg
+M180 EMS2: share |err| < 10 deg per bin [90 86 79 81 80 80 68 72 69 54 32 43]; users per bin [91 49 80 85 70 122 114 172 155 505 569 4248]
+M240 EMS1 (beamwidth 0.0074 in sin): median |err| per bin [1.6 1.7 1.4 2.1 3.9 5.3 8.2 9.4 8.8 8.1 4 5.7] deg
+M240 EMS1: share |err| < 10 deg per bin [100 89 96 84 96 85 68 54 54 54 74 75]; users per bin [13 9 24 19 24 47 40 61 91 185 161 2886]
+M240 EMS2 (beamwidth 0.0074 in sin): median |err| per bin [0.2 5.7 2.3 2.1 1.1 2.5 1 1.6 2.2 4.1 3.8 33.7] deg
+M240 EMS2: share |err| < 10 deg per bin [100 73 90 78 93 86 79 76 70 66 66 45]; users per bin [19 67 72 72 56 105 97 166 121 265 401 4819]
