@@ -58,6 +58,12 @@ for pop = {'fullnlos','nolos'}
                 st = @(x) [median(abs(x)), sqrt(mean(x.^2))];
                 rows(end+1,:) = {pop{1}, sub{1}, tag, K, nnz(s1), nnz(s2), nnz(sj), ...
                                  st(err(s1,1)), st(err(s2,2)), st(j)}; %#ok<SAGROW>
+                % same, split: users reachable by both EMSs vs by this EMS only
+                o1 = s1 & ~reachE(:,2);  o2 = s2 & ~reachE(:,1);
+                rows(end+1,:) = {pop{1}, [sub{1} ' | reachable by both'], tag, K, nnz(sj), nnz(sj), nnz(sj), ...
+                                 st(err(sj,1)), st(err(sj,2)), st(j)}; %#ok<SAGROW>
+                rows(end+1,:) = {pop{1}, [sub{1} ' | reachable by this EMS only'], tag, K, nnz(o1), nnz(o2), 0, ...
+                                 st(err(o1,1)), st(err(o2,2)), [NaN NaN]}; %#ok<SAGROW>
             end
         end
     end
