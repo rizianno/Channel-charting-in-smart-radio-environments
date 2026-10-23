@@ -1,9 +1,10 @@
 # Full-NLOS users: EMS beam selection vs number of sweeps, surfaces 60..240 (noise `est_G60dB`)
 
-Generated 2026-10-22 16:45 by `experiments/Main_AoA_Serving_NLoS_Size.m` (branch aoa-serving), runtime 11 min.
+Generated 2026-10-23 08:03 by `experiments/Main_AoA_Serving_NLoS_Size.m` (branch aoa-serving), runtime 1 min.
 
 ## Setup
-- **Users:** full NLOS = no BS-UE channel at all (885 users); the EMSs are their only link. t-SNE: one 1-D chart per EMS with the full-NLOS users it reaches (EMS1: 419 users, 63 anchors, perplexity 84; EMS2: 737, 111, 147). Scored: reachable by at least one EMS and anchor in neither chart.
+- **Users:** full NLOS = no BS-UE channel at all (885 users); the EMSs are their only link.
+- **t-SNE:** one 1-D chart per EMS with the users of this population it reaches (EMS1: 419 users, 63 anchors, perplexity 84; EMS2: 737, 111, 147). Scored: reachable by at least one EMS and anchor in neither chart.
 - **Surfaces:** M x M elements, lambda/2, steering along one axis only (vertical: same phase on every column). `M60_raytraced` = the dataset; `M60/120/180/240` = synthesized with spherical waves from the UE, EMS and BS positions, per-user strengths fitted on the 60 x 60 data. Codebook from the beamwidth: N = 68/136/204/272.
 - **Schemes vs number of sweeps:** sequential, spread, hierarchical (4 spread entries, then halving), spread + R neighbours, t-SNE AoA + LUT (K = [1 2 3 4 5 6 7 8] spread training sweeps, both EMSs on the same entry), t-SNE + LUT entry + R neighbours (R = [2 4 6]), exhaustive (N), true AoA + LUT.
 - Measurement-based selection uses each EMS path's own gain (noise-free, in favour of the sweeping baselines); the served SNR uses the true channel; 23 dBm, -92 dBm.
