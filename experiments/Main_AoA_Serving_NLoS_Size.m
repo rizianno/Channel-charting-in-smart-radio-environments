@@ -244,6 +244,12 @@ for sz = sizes
             [i1, i2] = sel({nbr(lut(:,1), R, N, true), nbr(lut(:,2), R, N, true)});
             rows = add(rows, 'tsne+refine', R, nK + R + 1, snrOf(i1, i2));
         end
+        % t-SNE warm-started hierarchical search: measure the LUT entry, then test +-delta around
+        % the current best and halve delta (delta0 = N/8); column R holds K for this scheme
+        for b = 1:(Smax - nK)
+            [i1, i2] = warm_hier(Gown, lut, N, b, round(N/8));
+            rows = add(rows, 'tsne+hierarchical', nK, nK + b, snrOf(i1, i2));
+        end
         err = mod(azHat - U.az(nlos,:) + 180, 360) - 180;
         r1 = reachE(:,1) & ~isAnch(:,1);  r2 = reachE(:,2) & ~isAnch(:,2);
         offb = [mean(cdist(lut(r1,1), lutT(r1,1), N) > 1), mean(cdist(lut(r2,2), lutT(r2,2), N) > 1)];
@@ -384,6 +390,27 @@ function [i1, i2] = hierarchical(Gown, N, s, spread)
                 better = g((cand-1)*n + (1:n).') > g((b-1)*n + (1:n).');
                 b(better) = cand(better);  used = used + 1;
             end
+        end
+        out{e} = b;
+    end
+    [i1, i2] = out{:};
+end
+
+function [i1, i2] = warm_hier(Gown, lut, N, budget, delta0)
+% hierarchical search per EMS starting from the LUT entry: 1 sweep to measure it, then the two
+% entries at +-delta around the current best (one sweep each), delta halved down to 1
+    n = size(Gown{1},1);  out = cell(1,2);
+    for e = 1:2
+        g = Gown{e};  b = lut(:,e);  used = 1;  delta = delta0;
+        while used < budget && delta >= 1
+            for sgn = [-1 1]
+                if used >= budget, break; end
+                cand = mod(b - 1 + sgn*delta, N) + 1;
+                better = g((cand-1)*n + (1:n).') > g((b-1)*n + (1:n).');
+                b(better) = cand(better);  used = used + 1;
+            end
+            if delta == 1, break; end
+            delta = ceil(delta/2);
         end
         out{e} = b;
     end
