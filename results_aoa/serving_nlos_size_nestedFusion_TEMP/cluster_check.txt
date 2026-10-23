@@ -1,0 +1,17 @@
+Nested entries (real 60x60, N = 68): [34 68 17 51 9 26 43 60 4 13]
+EMS1 beam azimuth per entry: [-73 3 33 -27 18 54 -44 -11 9 25] deg
+EMS2 beam azimuth per entry: [-49 14 48 -15 31 -82 -29 1 21 39] deg
+cluster 1: 224 users (scored), centre (-65, -34) m, azimuth -90..-67 deg
+cluster 2: 153 users (scored), centre (-5, -38) m, azimuth -38..-24 deg
+cluster 3: 174 users (scored), centre (-11, 47) m, azimuth 31..40 deg
+cluster 4: 40 users (scored), centre (-46, -9) m, azimuth -33..-20 deg
+K= 1 (adds entry 34):  cl1  48.8 deg (picks entry 34 for 100%)  cl2   3.6 deg (picks entry 34 for 100%)  cl3  65.8 deg (picks entry 34 for 100%)  cl4   3.8 deg (picks entry 34 for 100%)
+K= 2 (adds entry 68):  cl1  47.4 deg (picks entry 34 for  67%)  cl2   3.4 deg (picks entry 34 for  76%)  cl3  66.3 deg (picks entry 34 for  75%)  cl4   3.8 deg (picks entry 34 for  58%)
+K= 3 (adds entry 17):  cl1  48.4 deg (picks entry 34 for  51%)  cl2   3.2 deg (picks entry 34 for  54%)  cl3  62.7 deg (picks entry 17 for  51%)  cl4   4.8 deg (picks entry 34 for  35%)
+K= 4 (adds entry 51):  cl1  46.9 deg (picks entry 34 for  45%)  cl2   3.4 deg (picks entry 34 for  42%)  cl3  63.3 deg (picks entry 17 for  46%)  cl4   4.5 deg (picks entry 34 for  32%)
+K= 5 (adds entry  9):  cl1  47.0 deg (picks entry 34 for  37%)  cl2   3.4 deg (picks entry 34 for  33%)  cl3   1.1 deg (picks entry 9 for  71%)  cl4   4.3 deg (picks entry 9 for  32%)
+K= 6 (adds entry 26):  cl1   5.1 deg (picks entry 26 for  67%)  cl2   3.7 deg (picks entry 26 for  26%)  cl3   1.2 deg (picks entry 9 for  68%)  cl4   3.9 deg (picks entry 26 for  40%)
+K= 7 (adds entry 43):  cl1   6.1 deg (picks entry 43 for  51%)  cl2   2.9 deg (picks entry 43 for  90%)  cl3   1.2 deg (picks entry 9 for  67%)  cl4   9.3 deg (picks entry 43 for  78%)
+K= 8 (adds entry 60):  cl1   6.1 deg (picks entry 43 for  51%)  cl2   2.9 deg (picks entry 43 for  90%)  cl3   1.2 deg (picks entry 9 for  67%)  cl4   8.7 deg (picks entry 43 for  75%)
+K= 9 (adds entry  4):  cl1   6.1 deg (picks entry 43 for  50%)  cl2   2.9 deg (picks entry 43 for  90%)  cl3   1.2 deg (picks entry 9 for  67%)  cl4   8.7 deg (picks entry 43 for  75%)
+K=10 (adds entry 13):  cl1   6.1 deg (picks entry 43 for  50%)  cl2   3.0 deg (picks entry 43 for  90%)  cl3   0.5 deg (picks entry 13 for  60%)  cl4   8.7 deg (picks entry 43 for  75%)
