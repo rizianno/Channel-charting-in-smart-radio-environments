@@ -106,9 +106,9 @@ for pp = pops
         snrE = @(e, i) rho * lmax(Hd + pick(A{e}, i));
         snrJ = @(i1, i2) rho * lmax(Hd + pick(A{1}, i1) + pick(A{2}, i2));
         azTrue = U.az(popU, :);
-        % pointing error of the chosen beam: at lambda/2 a beam at sin = u also radiates at u +- 2
-        % (grating lobe near endfire), so it is scored by its direction closest to the user
-        beamErr = @(e, i) beam_err(ub{e}(i(:)).', azTrue(:,e));
+        % pointing error of the chosen beam; at lambda/2 the copy u +- 2 of a beam steered to the
+        % edge (|u| ~ 1) is also radiated, if it lies within half a beamwidth of the visible region
+        beamErr = @(e, i) beam_err(ub{e}(i(:)).', azTrue(:,e), wu/2);
         grpOf = @(m) {'full NLOS', m & isNone, isNone; 'reflection only', m & ~isNone, ~isNone};
 
         % ---- charts: EMS alone (per entry) and joint (per pair), from caches or computed
@@ -371,11 +371,14 @@ function k = nkey(nzName, ctag, e, pr)
     else, k = sprintf('%s|%s|ngrid|e%d|%d_%d', nzName, ctag, e, pr(1), pr(2)); end
 end
 
-function err = beam_err(u, az)
-% |pointing error| [deg] of beams at sin = u for users at azimuth az: the beam's equivalent
-% direction u + 2k closest to the user (lambda/2 grating lobes), clipped to the visible region
-    ut = sind(az);  u2 = u + 2*round((ut - u)/2);  u2 = min(max(u2, -1), 1);
-    err = abs(asind(u2) - az);
+function err = beam_err(u, az, hw)
+% |pointing error| [deg] of beams at sin = u (in [-1, 1)) for users at azimuth az. At lambda/2 the
+% copy u - 2 or u + 2 is radiated only if it lies within hw (half the beamwidth) of the visible
+% region [-1, 1], i.e. for beams steered to the edge; the radiated direction closest to the user
+% counts, clipped to [-1, 1]
+    ut = sind(az);  C = [u, u - 2, u + 2];  C(abs(C) > 1 + hw) = NaN;
+    [~, k] = min(abs(C - ut), [], 2);  u2 = C(sub2ind(size(C), (1:numel(u)).', k));
+    err = abs(asind(min(max(u2, -1), 1)) - az);
 end
 
 function x = select_chart(E, QT, nA, lab)
