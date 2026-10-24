@@ -12,6 +12,7 @@ Figures go to one subfolder per training assumption (solid: t-SNE pure and hybri
   3_random_training         : no prior: random training codewords (mean of 10 draws), hybrids and
                               searches over the full codebook
 Dotted blue (angle rows): the error of the t-SNE AoA estimate itself.
+Pointing error (newer summaries): |sin(theta_user) - sin(theta_beam)| modulo 2, in beamwidths.
 Usage: python experiments/plot_deployments.py results_aoa/serving_deployments/est_G60dB
 """
 import csv, os, sys, time, collections
@@ -69,8 +70,9 @@ VARIANTS = [
 COLS = [('EMS1 alone', 'EMS1', 'EMS1 trained alone'), ('EMS2 alone', 'EMS2', 'EMS2 trained alone'),
         ('joint', 'EMS1', 'joint training, EMS1 view'), ('joint', 'EMS2', 'joint training, EMS2 view'),
         ('joint', 'joint', 'joint training, both EMSs serving\n(angles pooled over EMS1 and EMS2)')]
-ROWS = [('beam_err_median_deg', 'median angle error [deg]'), ('beam_err_rmse_deg', 'RMSE angle error [deg]'),
-        ('dsnr_median_dB', 'median SNR gain [dB]')]
+BW = any('beam_err_median_bw' in x for t in T.values() for x in t.values())     # pointing error in beamwidths
+ROWS = ([('beam_err_median_bw', 'median pointing error [beamwidths]'), ('beam_err_rmse_bw', 'RMSE pointing error [beamwidths]')] if BW else
+        [('beam_err_median_deg', 'median angle error [deg]'), ('beam_err_rmse_deg', 'RMSE angle error [deg]')]) + \n       [('dsnr_median_dB', 'median SNR gain [dB]')]
 SURF = {'M60_raytraced': 'real 60x60', 'M60': '60x60 (synthetic)', 'M120': '120x120 (synthetic)',
         'M180': '180x180 (synthetic)', 'M240': '240x240 (synthetic)'}
 

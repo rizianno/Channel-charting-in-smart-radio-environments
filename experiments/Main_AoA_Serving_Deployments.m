@@ -8,8 +8,9 @@
 %                             nested modes; charts reused from those caches).
 % Evaluation views:
 %   EMS1 / EMS2 : beam of that EMS only; SNR served by that EMS alone (+ the direct channel),
-%                 users it reaches; angle = pointing error of the chosen beam (and, for t-SNE,
-%                 the error of the estimated AoA itself);
+%                 users it reaches; pointing error of the chosen beam = |sin(theta_user) -
+%                 sin(theta_beam)| modulo 2, in beamwidths (and, for t-SNE, the error of the estimated
+%                 AoA itself, in degrees);
 %   joint       : (joint deployment only) both EMSs steered, SNR served by both, users reached by
 %                 at least one EMS; angle errors pooled over both EMSs (every user-EMS pair).
 % So "EMS1 alone" and "joint, EMS1 view" differ only in the training data.
@@ -112,9 +113,10 @@ for pp = pops
         snrE = @(e, i) rho * lmax(Hd + pick(A{e}, i));
         snrJ = @(i1, i2) rho * lmax(Hd + pick(A{1}, i1) + pick(A{2}, i2));
         azTrue = U.az(popU, :);
-        % pointing error of the chosen beam; at lambda/2 the copy u +- 2 of a beam steered to the
-        % edge (|u| ~ 1) is also radiated, if it lies within half a beamwidth of the visible region
-        beamErr = @(e, i) beam_err(ub{e}(i(:)).', azTrue(:,e), wu/2);
+        % pointing error of the chosen beam in beamwidths: distance in sin(theta) between the user and
+        % the beam, modulo 2 (at lambda/2 the array response is periodic in sin(theta) with period 2),
+        % divided by the beamwidth wu: what the beam gain depends on, well defined also near +-90 deg
+        beamErr = @(e, i) abs(mod(sind(azTrue(:,e)) - ub{e}(i(:)).' + 1, 2) - 1) / wu;
         grpOf = @(m) {'full NLOS', m & isNone, isNone; 'reflection only', m & ~isNone, ~isNone};
 
         % ---- charts: EMS alone (per entry) and joint (per pair), from caches or computed
@@ -290,8 +292,8 @@ end
 
 function write_table(outDir, rows)
     T = cell2table(rows, 'VariableNames', {'population','surface','M','N','deployment','view','training','scheme','K','R','sweeps', ...
-        'group','n_users','dsnr_median_dB','dsnr_mean_dB','dsnr_p10_dB','snr_median_dB','beam_err_median_deg','beam_err_rmse_deg', ...
-        'beam_err_p90_deg','tsne_err_median_deg','tsne_err_rmse_deg','tsne_err_p90_deg','se_mean','dse_mean','n_draws','x'});
+        'group','n_users','dsnr_median_dB','dsnr_mean_dB','dsnr_p10_dB','snr_median_dB','beam_err_median_bw','beam_err_rmse_bw', ...
+        'beam_err_p90_bw','tsne_err_median_deg','tsne_err_rmse_deg','tsne_err_p90_deg','se_mean','dse_mean','n_draws','x'});
     T.x = [];
     writetable(T, fullfile(outDir,'summary.csv'));
 end
