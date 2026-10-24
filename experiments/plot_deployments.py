@@ -14,7 +14,7 @@ Figures go to one subfolder per training assumption (solid: t-SNE pure and hybri
 Dotted blue (angle rows): the error of the t-SNE AoA estimate itself.
 Pointing error (newer summaries): |sin(theta_user) - sin(theta_beam)| modulo 2, in beamwidths.
 PDP_STYLE=previous: pure t-SNE (K sweeps) and + 2/4/6 neighbours instead of the never-worse curves;
-PDP_OUT: output folder name (default figures).
+PDP_OUT: output folder name (default figures); PDP_POPS: populations to draw (default fullnlos,nolos).
 Usage: python experiments/plot_deployments.py results_aoa/serving_deployments/est_G60dB
 """
 import csv, os, sys, time, collections
@@ -77,7 +77,8 @@ COLS = [('EMS1 alone', 'EMS1', 'EMS1 trained alone'), ('EMS2 alone', 'EMS2', 'EM
         ('joint', 'joint', 'joint training, both EMSs serving\n(angles pooled over EMS1 and EMS2)')]
 BW = any('beam_err_median_bw' in x for t in T.values() for x in t.values())     # pointing error in beamwidths
 ROWS = ([('beam_err_median_bw', 'median pointing error [beamwidths]'), ('beam_err_rmse_bw', 'RMSE pointing error [beamwidths]')] if BW else
-        [('beam_err_median_deg', 'median angle error [deg]'), ('beam_err_rmse_deg', 'RMSE angle error [deg]')]) + \n       [('dsnr_median_dB', 'median SNR gain [dB]')]
+        [('beam_err_median_deg', 'median angle error [deg]'), ('beam_err_rmse_deg', 'RMSE angle error [deg]')]) + \
+       [('dsnr_median_dB', 'median SNR gain [dB]')]
 SURF = {'M60_raytraced': 'real 60x60', 'M60': '60x60 (synthetic)', 'M120': '120x120 (synthetic)',
         'M180': '180x180 (synthetic)', 'M240': '240x240 (synthetic)'}
 
@@ -99,6 +100,8 @@ for folder, vtitle, main, series in VARIANTS:
     out = os.path.join(D, FIGDIR, folder)
     os.makedirs(out, exist_ok=True)
     for pop, grp, gname in [('fullnlos', 'full NLOS', 'full-NLOS users'), ('nolos', 'reflection only', 'reflection-only (orange) users')]:
+        if pop not in os.environ.get('PDP_POPS', 'fullnlos,nolos').split(','):
+            continue
         for surf, sname in SURF.items():
             if not any(k[0] == pop and k[1] == surf and k[4] == grp for k in T):
                 continue
