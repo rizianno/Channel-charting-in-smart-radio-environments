@@ -106,7 +106,9 @@ for pp = pops
         snrE = @(e, i) rho * lmax(Hd + pick(A{e}, i));
         snrJ = @(i1, i2) rho * lmax(Hd + pick(A{1}, i1) + pick(A{2}, i2));
         azTrue = U.az(popU, :);
-        beamAz = @(e, i) asind(ub{e}(i(:))).';
+        % pointing error of the chosen beam: at lambda/2 a beam at sin = u also radiates at u +- 2
+        % (grating lobe near endfire), so it is scored by its direction closest to the user
+        beamErr = @(e, i) beam_err(ub{e}(i(:)).', azTrue(:,e));
         grpOf = @(m) {'full NLOS', m & isNone, isNone; 'reflection only', m & ~isNone, ~isNone};
 
         % ---- charts: EMS alone (per entry) and joint (per pair), from caches or computed
@@ -149,7 +151,7 @@ for pp = pops
                 ii = {srch{q,2}(1, s), srch{q,2}(2, s)};  aeE = cell(1,2);  mE = cell(1,2);
                 for e = 1:2
                     m = scoredE{e} & snrE(e, exh{e}).' > 0;
-                    ae = abs(mod(beamAz(e, ii{e}) - azTrue(:,e) + 180, 360) - 180);
+                    ae = beamErr(e, ii{e});
                     aeE{e} = ae;  mE{e} = m;
                     for dep = {sprintf('EMS%d alone', e), 'joint'}
                         rows = add(rows, dep{1}, sprintf('EMS%d', e), '-', srch{q,1}, 0, 0, s, snrE(e, ii{e}), base{e}, m, ae, nan(nU,1));
@@ -164,7 +166,7 @@ for pp = pops
             m = scoredE{e} & snrE(e, exh{e}).' > 0;
             for dep = {sprintf('EMS%d alone', e), 'joint'}
                 rows = add(rows, dep{1}, sprintf('EMS%d', e), '-', 'true AoA + LUT', 0, 0, 0, snrE(e, lutT(:,e)), base{e}, m, ...
-                           abs(mod(beamAz(e, lutT(:,e)) - azTrue(:,e) + 180, 360) - 180), nan(nU,1));
+                           beamErr(e, lutT(:,e)), nan(nU,1));
             end
         end
 
@@ -217,7 +219,7 @@ for pp = pops
                             ii = {sch{q,4}(1), sch{q,4}(2)};  aBe = cell(1,2);  aTe = cell(1,2);  mE = cell(1,2);
                             for e = ee
                                 m = scoredE{e} & snrE(e, exh{e}).' > 0;
-                                aB = abs(mod(beamAz(e, ii{e}) - azTrue(:,e) + 180, 360) - 180);
+                                aB = beamErr(e, ii{e});
                                 aT = abs(mod(az(:,e) - azTrue(:,e) + 180, 360) - 180);
                                 aBe{e} = aB;  aTe{e} = aT;  mE{e} = m;
                                 rr = add(rr, dep{1}, sprintf('EMS%d', e), tr, sch{q,1}, K, sch{q,2}, sch{q,3}, snrE(e, ii{e}), base{e}, m, aB, aT);
@@ -367,6 +369,13 @@ end
 function k = nkey(nzName, ctag, e, pr)
     if pr(1) == pr(2), k = sprintf('%s|%s|nest|e%d|%d', nzName, ctag, e, pr(1));
     else, k = sprintf('%s|%s|ngrid|e%d|%d_%d', nzName, ctag, e, pr(1), pr(2)); end
+end
+
+function err = beam_err(u, az)
+% |pointing error| [deg] of beams at sin = u for users at azimuth az: the beam's equivalent
+% direction u + 2k closest to the user (lambda/2 grating lobes), clipped to the visible region
+    ut = sind(az);  u2 = u + 2*round((ut - u)/2);  u2 = min(max(u2, -1), 1);
+    err = abs(asind(u2) - az);
 end
 
 function x = select_chart(E, QT, nA, lab)
