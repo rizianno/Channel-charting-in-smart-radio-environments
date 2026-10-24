@@ -13,6 +13,8 @@ Figures go to one subfolder per training assumption (solid: t-SNE pure and hybri
                               searches over the full codebook
 Dotted blue (angle rows): the error of the t-SNE AoA estimate itself.
 Pointing error (newer summaries): |sin(theta_user) - sin(theta_beam)| modulo 2, in beamwidths.
+PDP_STYLE=previous: pure t-SNE (K sweeps) and + 2/4/6 neighbours instead of the never-worse curves;
+PDP_OUT: output folder name (default figures).
 Usage: python experiments/plot_deployments.py results_aoa/serving_deployments/est_G60dB
 """
 import csv, os, sys, time, collections
@@ -33,6 +35,9 @@ for x in csv.DictReader(open(os.path.join(D, 'summary.csv'))):
     T[k][(x['training'], x['scheme'], int(x['K']), int(x['R']), int(x['sweeps']))] = x
 
 MONO = any(k[1].startswith('tsne+verify+nbr') for t in T.values() for k in t)   # only never-worse curves
+if os.environ.get('PDP_STYLE', '') == 'previous':               # pure t-SNE at K sweeps, + R neighbours
+    MONO = False
+FIGDIR = os.environ.get('PDP_OUT', 'figures')                    # output folder (next to summary.csv)
 NOGREEDY = os.environ.get('PDP_NOGREEDY', '0') == '1'
 SW = list(range(1, int(os.environ.get('PDP_XMAX', '30' if MONO else '15')) + 1))
 
@@ -91,7 +96,7 @@ def exhaustive(tab, met):
 
 
 for folder, vtitle, main, series in VARIANTS:
-    out = os.path.join(D, 'figures', folder)
+    out = os.path.join(D, FIGDIR, folder)
     os.makedirs(out, exist_ok=True)
     for pop, grp, gname in [('fullnlos', 'full NLOS', 'full-NLOS users'), ('nolos', 'reflection only', 'reflection-only (orange) users')]:
         for surf, sname in SURF.items():
@@ -113,7 +118,7 @@ for folder, vtitle, main, series in VARIANTS:
                     if not curve(tab, main, 'tsne', None, 0, met)[0]:          # e.g. joint training never run
                         a.text(0.5, 0.92, 't-SNE not computed for this training\n(searches only: they need no training)',
                                ha='center', va='top', transform=a.transAxes, color=MUTED, fontsize=8)
-                    if met.startswith('beam') and not MONO:                    # the t-SNE AoA estimate itself
+                    if met.startswith('beam') and not MONO and not BW:         # the t-SNE AoA estimate (deg) itself
                         xs, ys = curve(tab, main, 'tsne', None, 0, met.replace('beam', 'tsne'))
                         if xs:
                             a.plot(xs, ys, ':', color='#2a78d6', lw=1.4)
@@ -129,7 +134,7 @@ for folder, vtitle, main, series in VARIANTS:
                     a.set_xticks([1] + list(range(5, max(SW) + 1, 5)) if MONO else SW[::2])
             h = [Line2D([], [], color=col, marker=mk, ls=ls, lw=lw, label=lab) for lab, tr, sc, Kf, R, col, mk, ls, lw in series]
             h = [x for x in h if not (NOGREEDY and x.get_label().startswith('greedy'))]
-            if not MONO:
+            if not MONO and not BW:
                 h.append(Line2D([], [], color='#2a78d6', ls=':', lw=1.4, label='t-SNE AoA estimate (angle rows)'))
             fig.legend(handles=h, loc='upper center', ncol=6, frameon=False, bbox_to_anchor=(0.5, 1.0), fontsize=9)
             fig.suptitle(f'{gname}, surface {sname}: {vtitle}', y=1.05, color=INK, fontsize=12)
