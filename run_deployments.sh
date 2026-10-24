@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run the single-EMS deployment experiment headless (see experiments/Main_AoA_Serving_Deployments.m).
+# Run the EMS deployment comparison headless (see experiments/Main_AoA_Serving_Deployments.m).
 #   SDP_WORKERS=48 ./run_deployments.sh
 # Log: logs/deployments.log
 set -euo pipefail
