@@ -7,7 +7,8 @@
 % Main_AoA_Serving_Deployments (its per_user.csv has K = 1, 3, 6 only; this file has every K).
 % Scored users: reached by the EMS and not anchors.
 % Environment: EAP_SIZES ("60r,60,120,180,240"), EAP_KMAX (15), EAP_FOOT (0.15), EAP_NOISE (est_G60dB)
-% Output: results_aoa/serving_deployments/<noise>/per_user_aoa.csv
+% Outputs: results_aoa/serving_deployments/<noise>/per_user_aoa.csv
+%          .../training_lists.csv: training codeword of slot k (and its direction u = sin theta)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 clc; clear; close all;
@@ -37,7 +38,7 @@ for e = 1:2
 end
 azTrue = U.az(popU, :);
 
-rows = {};
+rows = {};  tl = {};
 for sz = sizes
     real_ = endsWith(sz{1}, 'r');  M = str2double(erase(sz{1}, 'r'));
     tag = sprintf('M%d%s', M, repmat('_raytraced', 1, real_));
@@ -52,6 +53,8 @@ for sz = sizes
         Ra = load_cache(cf);
         for t = 1:size(lists,1)
             li = lists{t,2};
+            tl = [tl; repmat({tag, sprintf('EMS%d', e), lists{t,1}}, Kmax, 1), ...
+                  num2cell([(1:Kmax).', li(:), ub(li).', repmat([N, sind(specular(e))], Kmax, 1)])]; %#ok<AGROW>
             for K = 1:Kmax
                 if ~all(arrayfun(@(i) isKey(Ra, sprintf('%d', i)), li(1:K)))
                     fprintf('[%s] EMS%d %s: K = %d not cached, stop\n', tag, e, lists{t,1}, K);  break
@@ -71,6 +74,8 @@ end
 outDir = fullfile(root,'results_aoa','serving_deployments', nz.name);
 writetable(cell2table(rows, 'VariableNames', {'surface','view','training','K','user','x_m','y_m','anchor','scored', ...
     'az_true_deg','az_est_deg','aoa_err_deg'}), fullfile(outDir,'per_user_aoa.csv'));
+writetable(cell2table(tl, 'VariableNames', {'surface','view','training','k','codeword','u','N','sin_spec'}), ...
+           fullfile(outDir,'training_lists.csv'));
 fprintf('\n=== DONE (%.1f min) ===\n', toc(t0)/60);
 
 %% ========================================================================
