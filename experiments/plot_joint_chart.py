@@ -12,6 +12,7 @@ Shell order (second argument 'shell'): the same pairs evaluated after every acqu
 Curves absent from a summary (e.g. t-SNE + verify in older runs) are simply not drawn. When the
 summary has the incremental neighbour search, only never-worse (in SNR) curves are drawn: t-SNE +
 verify, + neighbour search after 1 / 4 / 9 verified acquisitions, (4 acq.) + hierarchical, searches.
+x axis cut at PJC_XMAX total sweeps (default 48).
 Usage: python experiments/plot_joint_chart.py results_aoa/serving_joint_chart/est_G60dB
        python experiments/plot_joint_chart.py results_aoa/serving_joint_chart/est_G60dB/figures/shell_order shell
 """
@@ -30,7 +31,8 @@ plt.rcParams.update({'font.size': 9, 'axes.edgecolor': MUTED, 'axes.labelcolor':
 T = collections.defaultdict(dict)
 for x in csv.DictReader(open(os.path.join(D, 'summary.csv'))):
     T[(x['surface'], x['view'])][(x['training'], x['scheme'], int(x['K']), int(x['R']), int(x['sweeps']))] = x
-XMAX = max(k[4] for t in T.values() for k in t)
+XCUT = int(os.environ.get('PJC_XMAX', '48'))                    # x axis cut (total sweeps)
+XMAX = min(XCUT, max(k[4] for t in T.values() for k in t))
 MONO = any(k[1].startswith('tsne+verify+nbr') for t in T.values() for k in t)   # only never-worse curves
 
 
@@ -79,7 +81,7 @@ SURF = {'M60_raytraced': 'real 60x60', 'M60': '60x60 (synthetic)', 'M120': '120x
 def curve(tab, tr, sc, Kf, R, met):
     pts = {}
     for (t, s, K, r, w), x in tab.items():
-        if t == tr and s == sc and r == R and (Kf is None or K == Kf) and w >= 1:
+        if t == tr and s == sc and r == R and (Kf is None or K == Kf) and 1 <= w <= XMAX:
             pts[w] = float(x[met])
     return sorted(pts), [pts[w] for w in sorted(pts)]
 
@@ -115,7 +117,8 @@ for folder, vtitle, main, ser in VARIANTS:
                 if r == len(ROWS) - 1:
                     a.set_xlabel('total sweeps (joint t-SNE: acquisitions in shell order)' if SHELL else
                                  'total sweeps (pure joint t-SNE at K^2 = 1, 4, 9, ...)')
-                a.set_xticks(([1] + list(range(16, XMAX + 1, 16))) if SHELL else [1, 4, 9, 16, 25, 36, 49, 64, XMAX])
+                a.set_xticks(([1] + list(range(8, XMAX + 1, 8))) if SHELL else [x for x in (1, 4, 9, 16, 25, 36, 49, 64) if x < XMAX] + [XMAX])
+                a.set_xlim(0, XMAX + 1)
         h = [Line2D([], [], color=col, marker=mk, ls=ls, lw=lw, label=lab) for lab, tr, sc, Kf, R, col, mk, ls, lw in ser]
         if not MONO:
             h.append(Line2D([], [], color='#2a78d6', ls=':', lw=1.4, label='joint t-SNE AoA estimate (angle rows)'))
