@@ -7,7 +7,7 @@ pure and hybrid; dashed: searches (clusters only, and full-codebook hierarchical
 t-SNE with random and nested training; dotted blue: the t-SNE AoA estimate itself.
 Usage: python experiments/plot_deployments.py results_aoa/serving_deployments/est_G60dB
 """
-import csv, os, sys, collections
+import csv, os, sys, time, collections
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -42,7 +42,7 @@ SERIES = [
 ]
 COLS = [('EMS1 alone', 'EMS1', 'EMS1 trained alone'), ('EMS2 alone', 'EMS2', 'EMS2 trained alone'),
         ('joint', 'EMS1', 'joint training, EMS1 view'), ('joint', 'EMS2', 'joint training, EMS2 view'),
-        ('joint', 'joint', 'joint training, both serving')]
+        ('joint', 'joint', 'joint training, both EMSs serving')]
 ROWS = [('beam_err_median_deg', 'median angle error [deg]'), ('beam_err_rmse_deg', 'RMSE angle error [deg]'),
         ('dsnr_median_dB', 'median SNR gain [dB]')]
 SURF = {'M60_raytraced': 'real 60x60', 'M60': '60x60 (synthetic)', 'M120': '120x120 (synthetic)',
@@ -71,9 +71,11 @@ for pop, grp, gname in [('fullnlos', 'full NLOS', 'full-NLOS users'), ('nolos', 
             tab = T.get((pop, surf, dep, view, grp), {})
             for r, (met, ylab) in enumerate(ROWS):
                 a = ax[r, c]
+                if r == 0:
+                    a.set_title(ctitle, color=INK, fontsize=10)
                 if view == 'joint' and met.startswith('beam'):
-                    a.text(0.5, 0.5, 'angles are per EMS:\nsee the EMS1 / EMS2 views', ha='center', va='center',
-                           transform=a.transAxes, color=MUTED)
+                    a.text(0.5, 0.5, 'no single angle when both EMSs serve:\nsee the EMS1 / EMS2 views', ha='center',
+                           va='center', transform=a.transAxes, color=MUTED)
                     continue
                 for lab, tr, sc, Kf, R, col, mk, ls, lw in SERIES:
                     xs, ys = curve(tab, tr, sc, Kf, R, met)
@@ -88,8 +90,6 @@ for pop, grp, gname in [('fullnlos', 'full NLOS', 'full-NLOS users'), ('nolos', 
                     if ex is not None:
                         a.axhline(ex, color=INK, lw=1, ls=':')
                         a.text(15, ex, 'exhaustive', ha='right', va='bottom', color=MUTED, fontsize=8)
-                if r == 0:
-                    a.set_title(ctitle, color=INK, fontsize=10)
                 if c == 0:
                     a.set_ylabel(ylab)
                 if r == len(ROWS) - 1:
@@ -102,6 +102,11 @@ for pop, grp, gname in [('fullnlos', 'full NLOS', 'full-NLOS users'), ('nolos', 
                      y=1.05, color=INK, fontsize=12)
         fig.tight_layout(rect=(0, 0, 1, 0.93))
         fn = f"{'fullNLOS' if pop == 'fullnlos' else 'reflectionOnly'}_{surf}.png"
-        fig.savefig(os.path.join(OUT, fn), dpi=100, bbox_inches='tight')
+        for attempt in range(5):                                   # OneDrive may briefly lock the file
+            try:
+                fig.savefig(os.path.join(OUT, fn), dpi=100, bbox_inches='tight')
+                break
+            except OSError:
+                time.sleep(2)
         plt.close(fig)
         print(fn)
