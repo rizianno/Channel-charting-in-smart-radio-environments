@@ -4,7 +4,7 @@ One figure per user subset (full NLOS, reflection only) and surface. Rows: media
 pointing error of the chosen beam, median SNR gain. Columns: EMS1 alone, EMS2 alone, joint training
 seen from EMS1, from EMS2, and both EMSs serving together (angles pooled over both EMSs). Solid lines: t-SNE (informed training)
 pure and hybrid; dashed: searches (clusters only, and full-codebook hierarchical); thin grey: pure
-t-SNE with random and nested training; dotted blue: the t-SNE AoA estimate itself.
+t-SNE with random and coarse-to-fine training (one loop over N/2, N, N/4, 3N/4, ...; called "nested" in the CSV); dotted blue: the t-SNE AoA estimate itself.
 Usage: python experiments/plot_deployments.py results_aoa/serving_deployments/est_G60dB
 """
 import csv, os, sys, time, collections
@@ -38,7 +38,7 @@ SERIES = [
     ('hierarchical search, clusters only', '-',      'hierarchical[clusters]',      None, 0, '#6250d6', 'X', '--', 1.6),
     ('hierarchical search, full codebook', '-',      'hierarchical',                None, 0, '#e34948', 'x', '--', 1.4),
     ('t-SNE, random training',           'random',   'tsne',                        None, 0, '#9a998f', 's', '-', 1.0),
-    ('t-SNE, nested training',           'nested',   'tsne',                        None, 0, '#c3c2b7', '^', '-', 1.0),
+    ('t-SNE, coarse-to-fine training',   'nested',   'tsne',                        None, 0, '#c3c2b7', '^', '-', 1.0),
 ]
 COLS = [('EMS1 alone', 'EMS1', 'EMS1 trained alone'), ('EMS2 alone', 'EMS2', 'EMS2 trained alone'),
         ('joint', 'EMS1', 'joint training, EMS1 view'), ('joint', 'EMS2', 'joint training, EMS2 view'),
