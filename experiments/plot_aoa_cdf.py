@@ -5,7 +5,7 @@ per EMS and surface: uninformed training (no prior: the fixed sweeping order, "n
 next to informed training (angle prior from the anchors); one curve per K, coloured by K. Dotted:
 one beamwidth at broadside. Surfaces are named by their size only (60x60 is the ray-traced one; the
 model-based 60x60 is a check and is not drawn).
-Output: <results>/figures/aoa_cdf/cdf_aoa_<EMS>_<surface>.png/.pdf
+Output: <results>/figures/aoa_cdf/cdf_aoa_<EMS>_<surface>.png/.pdf (side by side) and ..._v (stacked)
 Usage: python experiments/plot_aoa_cdf.py results_aoa/serving_deployments/est_G60dB
 """
 import csv, os, sys, time, collections
@@ -32,12 +32,15 @@ for r in csv.DictReader(open(os.path.join(D, 'per_user_aoa.csv'))):
     if r['scored'] in ('1', 'true'):
         E[(r['surface'], r['view'], r['training'], int(r['K']))].append(float(r['aoa_err_deg']))
 
-for surf, (M, sname) in SURF.items():
+for (surf, (M, sname)), vert in [(s, v) for s in SURF.items() for v in (False, True)]:
     bw = np.degrees(np.arcsin(0.886 * 2 / M))          # one beamwidth at broadside [deg]
     for view in ('EMS1', 'EMS2'):
         if not any(k[0] == surf and k[1] == view for k in E):
             continue
-        fig, ax = plt.subplots(1, 2, figsize=(9.6, 3.9), sharey=True)
+        if vert:                                        # stacked panels (for the slides): _v
+            fig, ax = plt.subplots(2, 1, figsize=(6.0, 6.2), sharex=True)
+        else:
+            fig, ax = plt.subplots(1, 2, figsize=(9.6, 3.9), sharey=True)
         for c, (tr, tname) in enumerate(TRN):
             a = ax[c]
             for i, K in enumerate(KS):
@@ -46,27 +49,31 @@ for surf, (M, sname) in SURF.items():
                     v = np.maximum(v, 1e-2)
                     a.step(v, np.arange(1, v.size + 1) / v.size, where='post', color=CMAP(i), lw=1.6)
             a.axvline(bw, color=INK, ls=':', lw=1)
-            a.text(bw * 1.08, 0.04, f'1 beamwidth\n({bw:.2f}°)', fontsize=8.5, color=MUTED, va='bottom')
+            a.text(bw * 0.92, 0.97, f'1 beamwidth ({bw:.2f}°)', fontsize=8.5, color=MUTED, va='top', ha='right',
+                   bbox=dict(boxstyle='round,pad=0.15', fc='white', ec='none'))
             a.set_xscale('log');  a.set_xlim(0.05, 180);  a.set_ylim(0, 1.0)
             a.set_xticks([0.1, 1, 10, 100]);  a.set_xticklabels(['0.1', '1', '10', '100'])
             a.grid(True, color=GRID, lw=0.7, which='major')
             a.set_title(tname, fontsize=11, color=INK)
-            a.set_xlabel('|AoA error| [deg]', fontsize=10)
-            if c == 0:
+            if c == 1 or not vert:
+                a.set_xlabel('|AoA error| [deg]', fontsize=10)
+            if c == 0 or vert:
                 a.set_ylabel('CDF over the users', fontsize=10)
         cb = fig.colorbar(matplotlib.cm.ScalarMappable(norm=NORM, cmap=CMAP), ax=ax, ticks=[1, 3, 5, 7, 9, 11, 13, 15],
-                          fraction=0.025, pad=0.02)
+                          fraction=0.04 if vert else 0.025, pad=0.03 if vert else 0.02)
         cb.set_label('K (training slots)', fontsize=10);  cb.ax.tick_params(labelsize=9)
         n = len(E.get((surf, view, 'informed', 1), []))
-        fig.suptitle(f'{view}, {sname}: CDF of the t-SNE AoA error ({n} users)', fontsize=12, color=INK, x=0.45, y=1.02)
+        fig.suptitle(f'{view}, {sname}: CDF of the t-SNE AoA error ({n} users)', fontsize=12, color=INK,
+                     x=0.42 if vert else 0.45, y=0.99 if vert else 1.02)
+        name = f'cdf_aoa_{view}_{surf}' + ('_v' if vert else '')
         for ext in ('png', 'pdf'):
             for attempt in range(5):                       # OneDrive may briefly lock the file
                 try:
-                    fig.savefig(os.path.join(OUT, f'cdf_aoa_{view}_{surf}.{ext}'), dpi=200, bbox_inches='tight')
+                    fig.savefig(os.path.join(OUT, f'{name}.{ext}'), dpi=200, bbox_inches='tight')
                     break
                 except OSError:
                     time.sleep(2)
             else:
-                raise OSError(f'could not save cdf_aoa_{view}_{surf}.{ext}')
+                raise OSError(f'could not save {name}.{ext}')
         plt.close(fig)
-        print(view, surf)
+        print(name)

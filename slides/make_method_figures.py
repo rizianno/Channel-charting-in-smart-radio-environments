@@ -328,7 +328,7 @@ def fig_beam_choice():
     S = 8
     rowsd = []
     rowsd.append(('exhaustive', [(n, 'probe', None) for n in range(1, NC + 1)], cstar, f'{NC} sweeps'))
-    gr = order[:S];  rowsd.append(('greedy search\n(clusters first)', [(n, 'probe', i + 1) for i, n in enumerate(gr)], max(gr, key=g.get), f'{S} sweeps'))
+    gr = order[:S];  rowsd.append(('greedy search\n(informed)', [(n, 'probe', i + 1) for i, n in enumerate(gr)], max(gr, key=g.get), f'{S} sweeps'))
     hp, hb = hier(g, NC, S);  rowsd.append(('hierarchical\nsearch', [(n, 'probe', i + 1) for i, n in enumerate(hp)], hb, f'{S} sweeps'))
     rowsd.append(('t-SNE + look-up\ntable (K = 3)', [(n, 'train', i + 1) for i, n in enumerate(train)] + [(prop[-1], 'lut', None)], prop[-1], '3 sweeps'))
     ver = [(train[0], 'train', 1), (prop[0], 'probe', 2), (train[1], 'train', 3), (prop[1], 'probe', 4), (train[2], 'train', 5), (prop[2], 'probe', 6)]
@@ -389,6 +389,40 @@ def fig_gain_vs_pointing():
     save(fig, 'gain_vs_pointing')
 
 
+def fig_training_slots(view='EMS2', surf='M60_raytraced', K=6):
+    """Real data: angle prior of the anchors and the first K training slots of each method."""
+    D = os.path.join(REPO, 'results_aoa', 'serving_deployments', 'est_G60dB')
+    tl = [r for r in csv.DictReader(open(os.path.join(D, 'training_lists.csv'))) if r['surface'] == surf and r['view'] == view]
+    ua = np.sin(np.radians([float(r['az_true_deg']) for r in csv.DictReader(open(os.path.join(D, 'per_user_aoa.csv')))
+                            if r['surface'] == surf and r['view'] == view and r['training'] == 'informed'
+                            and r['K'] == '1' and r['anchor'] == '1']))
+    size = surf.split('_')[0][1:]
+    fig = plt.figure(figsize=(6.4, 4.2))
+    a0 = fig.add_axes([0.13, 0.42, 0.84, 0.44]);  a1 = fig.add_axes([0.13, 0.12, 0.84, 0.26], sharex=a0)
+    a0.hist(ua, bins=np.arange(-1, 1.0001, 0.04), color='#b7cdea', edgecolor='white', lw=0.5)
+    g = np.linspace(-1, 1, 801)
+    kde = np.exp(-0.5 * ((g[:, None] - ua[None]) / 0.03) ** 2).sum(1) / (ua.size * 0.03 * np.sqrt(2 * np.pi))
+    a0.plot(g, kde * ua.size * 0.04, color=BLUE, lw=1.6)
+    a0.set_ylabel('anchors', fontsize=9.5);  a0.tick_params(labelsize=8.5, labelbottom=False)
+    a0.set_title(f'{view}, {size}x{size} EMS: prior PDF of the user angles (from {ua.size} anchors) '
+                 f'and the first {K} slots', fontsize=10, color=INK, pad=24)
+    top = a0.secondary_xaxis('top', functions=(lambda v: np.degrees(np.arcsin(np.clip(v, -1, 1))), lambda d: np.sin(np.radians(d))))
+    top.set_xticks([-60, -30, 0, 30, 60]);  top.tick_params(labelsize=8.5);  top.set_xlabel('[deg]', fontsize=8.5, labelpad=1)
+    for row, (tr, lab, col, mk) in enumerate((('nested', 'uninformed', MUTED, 'o'), ('informed', 'informed', GREEN, 's'))):
+        for r in tl:
+            if r['training'] == tr and int(r['k']) <= K:
+                u = float(r['u'])
+                a1.plot(u, row, mk, ms=13, mfc='white', mec=col, mew=1.6, zorder=3)
+                a1.text(u, row, r['k'], ha='center', va='center', fontsize=8.5, color=col, zorder=4)
+                if tr == 'informed':
+                    a0.axvline(u, color=GREEN, lw=0.8, alpha=0.6)
+        a1.text(-1.04, row, lab, ha='right', va='center', fontsize=10, color=col)
+    a1.set_ylim(-0.6, 1.6);  a1.set_yticks([]);  a1.spines['left'].set_visible(False)
+    a1.set_xlim(-1.06, 1.06);  a1.tick_params(labelsize=8.5)
+    a1.set_xlabel('$\\sin\\theta$ at the EMS (number = training slot $k$)', fontsize=9.5)
+    save(fig, 'training_slots')
+
+
 if __name__ == '__main__':
     fig_cc_geometries()
     fig_sre_features()
@@ -396,3 +430,4 @@ if __name__ == '__main__':
     fig_codebook_beams()
     fig_beam_choice()
     fig_gain_vs_pointing()
+    fig_training_slots()

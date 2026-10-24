@@ -70,6 +70,11 @@ EQS = {
     'eqG2': r'\gamma_u(n) = \rho\,\max_{\|\mathbf{w}\|=1}\big\|\mathbf{w}^H\mathbf{H}_u(n)\big\|^2 = \rho\,\lambda_{\max}\big(\mathbf{H}_u(n)\,\mathbf{H}_u^H(n)\big)',
     'eqG3': r'\Delta\gamma_u = 10\log_{10}\frac{\gamma_u(\hat c_u)}{\gamma_u(n_0)}\ \ \text{[dB]}, \qquad \bm{\Phi}^{(n_0)} = \mathbf{I}',
     'eqG4': r'\varepsilon_u = \frac{\big|\big\langle\sin\theta_u - u_{\hat c_u}\big\rangle_2\big|}{\Delta u}\ \ \text{[beamwidths]}',
+    # the two ways to choose the training slots (update_slides_methods.py)
+    'eqH1': r'c_k = \mathrm{round}\big(f_k\,N_c\big), \qquad (f_k)_{k\ge1} = \tfrac{1}{2},\ 1,\ \tfrac{1}{4},\ \tfrac{3}{4},\ '
+            r'\tfrac{1}{8},\ \tfrac{3}{8},\ \tfrac{5}{8},\ \dots',
+    'eqH2': r'\hat p(\theta) = \frac{1}{|\mathcal{A}|}\sum_{a\in\mathcal{A}}\delta(\theta-\theta_a)',
+    'eqH3': r'c_k = \operatorname*{arg\,max}_{n\notin\{c_1,\dots,c_{k-1}\}}\ \big|\{a\in\mathcal{A}_k:\ |\sin\theta_a - u_n| \le r\}\big|',
 }
 # notation tables: name -> (box width [in], rows of (symbol, meaning))
 NOTES = {
@@ -91,7 +96,7 @@ NOTES = {
                      (r'\mathrm{KL}', r'Kullback--Leibler divergence, minimised by gradient descent; anchors reset at every iteration'),
                      (r'\mathrm{LE}_u', r'localisation error of user $u$ (true position $\mathbf{p}_u$)')]),
     'notD': (4.95, [(r'\theta_u', r'azimuth of user $u$ seen from the EMS (angle of arrival)'),
-                    (r'c_k', r'codeword of training slot $k$ (informed, coarse-to-fine or random)'),
+                    (r'c_k', r'codeword of training slot $k$ (uninformed or informed: previous slide)'),
                     (r'\bm{\Phi}^{(c)}', r'phase profile of codeword $c$ (next slide)'),
                     (r'\mathcal{N}_\kappa(u)', r'$\kappa$ nearest users of $u$ (chart or LED); $\kappa$ = 5\,\% of users'),
                     (r'r^{\mathrm{LED}}_{uu^\prime}', r'rank of $u^\prime$ among the LED neighbours of $u$'),
@@ -112,6 +117,12 @@ NOTES = {
                     (r'\mathbf{w},\ \lambda_{\max}', r'BS combiner ($N_{\mathrm{BS}} = 32$); largest eigenvalue'),
                     (r'n_0', r'zero-phase codeword ($n_0 = N_c/2$): the EMS acts as a mirror'),
                     (r'\hat c_u,\ \mathcal{U}_s', r'chosen codeword; scored users (previous slides)')]),
+    'notH': (5.3, [(r'f_k', r'fraction of the codebook for slot $k$: the gaps are halved level by level'),
+                   (r'N_c,\ u_n', r'number of codewords; direction ($\sin\theta$) served by codeword $n$'),
+                   (r'\hat p(\theta)', r'prior PDF of the user angles at the EMS, from the anchors'),
+                   (r'\mathcal{A},\ \theta_a', r'anchors (15\,\% of the users) and their azimuths'),
+                   (r'\mathcal{A}_k', r'anchors not yet covered by slots $1,\dots,k-1$'),
+                   (r'r', r'coverage radius in $\sin\theta$ ($0.15$), halved once (almost) every anchor is covered')]),
 }
 NOTE_PAD = 0.15                                            # inner margin of the notation box [in]
 
@@ -312,7 +323,7 @@ def build_B1(prs):
     y = step(s, 0.45, y, 7.4, 3, 'Dissimilarity: log-Euclidean distance (LED)', ['eqB3'],
              'Compares the received power (log scale) and the spatial signature of two users.', pt=16)
     card(s, 0.45, y + 0.05, 7.4, 0.8, None, [
-        '**Paper:** pick the EMS phases from a codebook to get the best chart (one static codeword), '
+        '**Our TWC paper:** pick the EMS phases from a codebook to get the best chart (one static codeword), '
         'or fuse the charts of several slots, one codeword each.'], size=13)
     fx, fy, fw, fh = figure(s, meth('sre_features'), 8.1, 1.12, 4.8, 3.15)
     textbox(s, 8.1, fy + fh + 0.02, 4.8, 0.3, 'Toy example: A and B (1.5 m apart) receive power from the same directions; C does not.',
@@ -333,14 +344,14 @@ def build_B2(prs):
         x = 7.95 + (k % 2) * 2.5;  yy = 1.2 + (k // 2) * 2.3
         textbox(s, x, yy, 2.4, 0.28, cap, size=11.5, bold=True, align=PP_ALIGN.CENTER)
         figure(s, paper(n), x, yy + 0.3, 2.4, 1.85)
-    textbox(s, 7.95, 5.85, 4.9, 0.6, 'From the paper: S-tSNE charts of the test points, colour = true y coordinate; '
+    textbox(s, 7.95, 5.85, 4.9, 0.6, 'From our TWC paper: S-tSNE charts of the test points, colour = true y coordinate; '
             'the chart is already in metres thanks to the anchors.', size=10.5, color=MUTED, italic=True)
 
 
 def build_D(prs):
     s = new_slide(prs, 'AoA chart: the same formulation, with the angle as label',
-                  'Per EMS: K training slots, one 1-D chart per slot, anchors labelled with their azimuth at the EMS.')
-    y = step(s, 0.45, 1.2, 7.25, 1, 'Slot k: one codeword for all users (the paper’s static slots)', ['eqD1'], pt=14)
+                  'In this paper, per EMS: K training slots, one 1-D chart per slot, anchors labelled with their azimuth.')
+    y = step(s, 0.45, 1.2, 7.25, 1, 'Slot k: one codeword for all users, as in our TWC paper', ['eqD1'], pt=14)
     y = step(s, 0.45, y - 0.04, 7.25, 2, '1-D t-SNE (same p and q), anchors clamped to their azimuth', ['eqD2'], pt=14)
     y = step(s, 0.45, y - 0.04, 7.25, 3, 'Per user, the most trustworthy of the K charts (no labels)', ['eqD3', 'eqD5'],
              pt={'eqD3': 14, 'eqD5': 12.5})
@@ -372,7 +383,7 @@ def build_F(prs):
             'performance: see the results.', size=10, color=MUTED, italic=True)
     card(s, 9.2, 1.15, 3.7, 4.05, 'The schemes', [
         '**Exhaustive:** all codewords (68 to 272 sweeps): the upper bound.',
-        '**Greedy:** one codeword per sweep along a fixed list (clusters first: beams at the anchors).',
+        '**Greedy:** one codeword per sweep along a fixed list (with the prior: the beams at the user groups first).',
         '**Hierarchical:** 4 coarse probes, then ±δ around the best so far, δ halved.',
         '**t-SNE + look-up:** K training slots, shared by all users; the proposal is not measured.',
         '**t-SNE + R neighbours:** the proposal and its R nearest codewords measured (K + R + 1 sweeps).',
