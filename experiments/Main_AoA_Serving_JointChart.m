@@ -24,7 +24,9 @@
 % BOTH EMSs, so no user carries a second label its channel says nothing about (default any).
 % SJC_VERIFY = 1 (shell order): 't-SNE + verify': after each acquisition the beam of the newly
 % selected estimate is also measured (per EMS, same slot) and the stronger of it and the current
-% beam is kept: monotone SNR, 2n sweeps after n acquisitions. SJC_OUTSUB: output subfolder.
+% beam is kept: monotone SNR, 2n sweeps after n acquisitions; after n = 1, 4, 9 also an incremental
+% neighbour search around the verified beam (+1, -1, +2, -2, ..., SJC_TNB sweeps, best so far).
+% SJC_OUTSUB: output subfolder.
 % Environment: SJC_ORDER (grid | shell), SJC_USERS (any | both), SJC_VERIFY (0), SJC_OUTSUB (shell_order), SJC_SIZES ("60r,60,120,180,240"), SJC_KS ("1:8"), SJC_RS ("2,4,6"), SJC_BMAX (16,
 %   hierarchical sweeps after training), SJC_FOOT (0.15), SJC_NOISE (est_G60dB), SJC_WORKERS (40)
 % Outputs: results_aoa/serving_joint_chart/<noise>/summary.csv
@@ -47,6 +49,7 @@ nW    = str2double(envs('SJC_WORKERS','40'));
 order = envs('SJC_ORDER','grid');
 usersMode = envs('SJC_USERS','any');
 verify = str2double(envs('SJC_VERIFY','0'));
+Tnb   = str2double(envs('SJC_TNB','32'));                       % neighbour-search sweeps after verify
 Smax  = Kmax^2 + max([Rs + 1, Bmax]);                           % searches up to the longest hybrid
 k0 = 2*pi/(3e8/30e9);  d = (3e8/30e9)/2;
 
@@ -163,6 +166,13 @@ for sz = sizes
                     end
                 end
                 rows = [rows; function_rows(tr{1}, 'tsne+verify', K, 0, 2*nAcq, bv{1}, bv{2}, az)]; %#ok<AGROW>
+                if ismember(K, [1 4 9])                             % + incremental neighbour search
+                    nb = nbr_search(G, bv, Sup, N, Tnb);
+                    for t = 1:Tnb
+                        rows = [rows; function_rows(tr{1}, 'tsne+verify+nbr', K, 0, 2*nAcq + t, nb.full{t,1}, nb.full{t,2}, az); ...
+                                      function_rows(tr{1}, 'tsne+verify+nbr[clusters]', K, 0, 2*nAcq + t, nb.cl{t,1}, nb.cl{t,2}, az)]; %#ok<AGROW>
+                    end
+                end
             end
             for R = Rs
                 rows = [rows; function_rows(tr{1}, 'tsne+refine', K, R, nAcq + R + 1, ...
@@ -224,6 +234,25 @@ function write_table(outDir, rows)
         'tsne_err_median_deg','tsne_err_rmse_deg','tsne_err_p90_deg','se_mean','x'});
     T.x = [];
     writetable(T, fullfile(outDir,'summary.csv'));
+end
+
+function nb = nbr_search(G, b0, Sup, N, T)
+% incremental neighbour search per EMS from the verified beams b0: sweep t probes the codeword at
+% offset +1, -1, +2, -2, ... from b0 (full codebook) or from b0's position in the cluster support
+% ([clusters]), keeping the best measured so far: never worse with more sweeps
+    off = reshape([1:ceil(T/2); -(1:ceil(T/2))], 1, []);  off = off(1:T);
+    nb.full = cell(T,2);  nb.cl = cell(T,2);
+    for e = 1:2
+        g = G{e};  n = size(g,1);  S = Sup{e};  Ns = numel(S);
+        [~, p0] = min(abs(b0{e} - S), [], 2);                  % nearest support entry (index distance)
+        bf = b0{e};  bc = b0{e};
+        for t = 1:T
+            c = mod(b0{e} - 1 + off(t), N) + 1;
+            up = g((c-1)*n + (1:n).') > g((bf-1)*n + (1:n).');  bf(up) = c(up);  nb.full{t,e} = bf;
+            c = S(mod(p0 - 1 + off(t), Ns) + 1).';
+            up = g((c-1)*n + (1:n).') > g((bc-1)*n + (1:n).');  bc(up) = c(up);  nb.cl{t,e} = bc;
+        end
+    end
 end
 
 function ij = shell_order(Kmax)

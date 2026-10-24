@@ -9,7 +9,9 @@ hybrids; dashed: searches. x axis: total sweeps.
   2_no_prior_coarse_to_fine : coarse-to-fine K x K lists; hybrids and searches over the full codebook
 Shell order (second argument 'shell'): the same pairs evaluated after every acquisition n = 1..64
 (the K x K grid grows by its new row and column one pair at a time); figures next to that summary.
-Curves absent from a summary (e.g. t-SNE + verify in older runs) are simply not drawn.
+Curves absent from a summary (e.g. t-SNE + verify in older runs) are simply not drawn. When the
+summary has the incremental neighbour search, only never-worse (in SNR) curves are drawn: t-SNE +
+verify, + neighbour search after 1 / 4 / 9 verified acquisitions, (4 acq.) + hierarchical, searches.
 Usage: python experiments/plot_joint_chart.py results_aoa/serving_joint_chart/est_G60dB
        python experiments/plot_joint_chart.py results_aoa/serving_joint_chart/est_G60dB/figures/shell_order shell
 """
@@ -29,9 +31,21 @@ T = collections.defaultdict(dict)
 for x in csv.DictReader(open(os.path.join(D, 'summary.csv'))):
     T[(x['surface'], x['view'])][(x['training'], x['scheme'], int(x['K']), int(x['R']), int(x['sweeps']))] = x
 XMAX = max(k[4] for t in T.values() for k in t)
+MONO = any(k[1].startswith('tsne+verify+nbr') for t in T.values() for k in t)   # only never-worse curves
+
+
+def mono_series(tr, sfx):
+    """Only curves whose SNR never drops with more sweeps (every beam they use is measured)."""
+    return [('t-SNE + verify (proposed beam measured)',      tr, 'tsne+verify',             None, 0, '#2a78d6', 'o', '-', 2.0),
+            ('t-SNE (1 acq.) + verify + neighbour search',  tr, 'tsne+verify+nbr' + sfx,   1,    0, '#eb6834', 's', '-', 1.6),
+            ('t-SNE (4 acq.) + verify + neighbour search',  tr, 'tsne+verify+nbr' + sfx,   4,    0, '#1baf7a', '^', '-', 1.6),
+            ('t-SNE (9 acq.) + verify + neighbour search',  tr, 'tsne+verify+nbr' + sfx,   9,    0, '#eda100', 'D', '-', 1.6),
+            ('t-SNE (4 acq.) + hierarchical',               tr, 'tsne+hierarchical' + sfx, 4,    0, '#e87ba4', 'v', '-', 1.6)]
 
 
 def series(tr, sfx, Kh):
+    if MONO:
+        return mono_series(tr, sfx)
     if SHELL:                                                      # column K = acquisitions n
         Kh, lab_h = Kh * Kh, f'{Kh * Kh} acq. (shell) + hierarchical'
     else:
@@ -88,7 +102,7 @@ for folder, vtitle, main, ser in VARIANTS:
                     if xs:
                         a.plot(xs, ys, ls, color=col, marker=mk, ms=4, lw=lw)
                 if met.startswith('beam'):
-                    xs, ys = curve(tab, main, 'tsne', None, 0, met.replace('beam', 'tsne'))
+                    xs, ys = curve(tab, main, 'tsne', None, 0, met.replace('beam', 'tsne')) if not MONO else ([], [])
                     if xs:
                         a.plot(xs, ys, ':', color='#2a78d6', lw=1.4)
                 else:
@@ -103,7 +117,8 @@ for folder, vtitle, main, ser in VARIANTS:
                                  'total sweeps (pure joint t-SNE at K^2 = 1, 4, 9, ...)')
                 a.set_xticks(([1] + list(range(16, XMAX + 1, 16))) if SHELL else [1, 4, 9, 16, 25, 36, 49, 64, XMAX])
         h = [Line2D([], [], color=col, marker=mk, ls=ls, lw=lw, label=lab) for lab, tr, sc, Kf, R, col, mk, ls, lw in ser]
-        h.append(Line2D([], [], color='#2a78d6', ls=':', lw=1.4, label='joint t-SNE AoA estimate (angle rows)'))
+        if not MONO:
+            h.append(Line2D([], [], color='#2a78d6', ls=':', lw=1.4, label='joint t-SNE AoA estimate (angle rows)'))
         fig.legend(handles=h, loc='upper center', ncol=4, frameon=False, bbox_to_anchor=(0.5, 1.0), fontsize=9)
         fig.suptitle(f'full-NLOS users, surface {sname}, joint 2-D t-SNE chart{" (shell order)" if SHELL else ""}: {vtitle}',
                      y=1.05, color=INK, fontsize=12)
