@@ -25,7 +25,6 @@
 % stronger kept, 2K sweeps) and, after K = 1, 3, 6 verified acquisitions, an incremental neighbour
 % search (+1, -1, +2, ... around the verified beam, best so far, SDP_TNB sweeps). Per-user records
 % (full NLOS, informed and coarse-to-fine training, K in SDP_PUKS) in per_user.csv.
-% Searches (hierarchical, and hierarchical warm-started at the LUT entry) never measure a codeword twice.
 % Environment: SDP_POP ("fullnlos,nolos"), SDP_SIZES ("60r,60,120,180,240"), SDP_KS ("1:15"),
 %   SDP_RS ("2,4,6"), SDP_SMAX (15), SDP_DRAWS (10), SDP_FOOT (0.15), SDP_NOISE (est_G60dB),
 %   SDP_WORKERS (48), SDP_NEWCHARTS (1; 0 = only cached t-SNE charts, missing K skipped),
@@ -524,38 +523,31 @@ end
 function b = hier1(g, N, s)
 % hierarchical search, incremental (design B): the first min(s,4) probes are the first entries of
 % one fixed ever-finer order (N/2, N, N/4, 3N/4: uniform on the circle once all four are taken),
-% then +-delta around the best so far, delta halved; every budget contains the previous one.
-% A codeword already measured is not measured again: that candidate is skipped, no sweep spent
-% (before, after a -delta win the +delta probe fell back on the previous best and cost a sweep).
-    n = size(g,1);  o = nest_order(N);  p0 = o(1:min([s, 4, numel(o)]));
-    b = best1(g, repmat(p0, n, 1));
-    seen = false(n, N);  seen(:, p0) = true;
-    ds = [];  d = N/4;
-    while d > 1, d = ceil(d/2);  ds(end+1) = d; end %#ok<AGROW>
-    b = ladder(g, b, N, seen, numel(p0) * ones(n,1), s, ds);
+% then +-delta around the best so far, delta halved; every budget contains the previous one
+    n = size(g,1);  o = nest_order(N);
+    b = best1(g, repmat(o(1:min(s,4)), n, 1));  used = min(s,4);  delta = N/4;
+    while used < s && delta > 1
+        delta = ceil(delta/2);
+        for sgn = [-1 1]
+            if used >= s, break; end
+            cand = mod(b - 1 + sgn*delta, N) + 1;
+            better = g((cand-1)*n + (1:n).') > g((b-1)*n + (1:n).');
+            b(better) = cand(better);  used = used + 1;
+        end
+    end
 end
 
 function b = warm1(g, b, N, budget, delta0)
-% hierarchical search warm-started at b (that measurement is the first sweep): +-delta around the
-% best so far, delta halved down to 1; a codeword already measured is skipped (no sweep spent)
-    n = size(g,1);  seen = false(n, N);  seen(sub2ind([n N], (1:n).', b(:))) = true;
-    ds = [];  d = delta0;
-    while d >= 1, ds(end+1) = d; if d == 1, break; end, d = ceil(d/2); end %#ok<AGROW>
-    b = ladder(g, b(:), N, seen, ones(n,1), budget, ds);
-end
-
-function b = ladder(g, b, N, seen, used, budget, ds)
-% per user: -delta then +delta around the best so far for each delta in ds, keeping the better;
-% a candidate already measured is skipped; stops when the user's budget is spent
-    n = size(g,1);  r = (1:n).';
-    for t = 1:2*numel(ds)
-        sgn = 1 - 2*mod(t, 2);                              % t odd: -delta, t even: +delta
-        c = mod(b - 1 + sgn*ds(ceil(t/2)), N) + 1;
-        ic = sub2ind([n N], r, c);
-        act = used < budget & ~seen(ic);
-        seen(ic(act)) = true;  used(act) = used(act) + 1;
-        better = act & g(ic) > g(sub2ind([n N], r, b));
-        b(better) = c(better);
+    n = size(g,1);  used = 1;  delta = delta0;
+    while used < budget && delta >= 1
+        for sgn = [-1 1]
+            if used >= budget, break; end
+            cand = mod(b - 1 + sgn*delta, N) + 1;
+            better = g((cand-1)*n + (1:n).') > g((b-1)*n + (1:n).');
+            b(better) = cand(better);  used = used + 1;
+        end
+        if delta == 1, break; end
+        delta = ceil(delta/2);
     end
 end
 
