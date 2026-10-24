@@ -41,14 +41,12 @@ def tsne_series(tr, sfx, name):
         return [('t-SNE + verify (proposed beam measured)',     tr, 'tsne+verify',             None, 0, '#2a78d6', 'o', '-', 2.0),
                 ('t-SNE (1 acq.) + verify + neighbour search', tr, 'tsne+verify+nbr' + sfx,   1,    0, '#eb6834', 's', '-', 1.6),
                 ('t-SNE (3 acq.) + verify + neighbour search', tr, 'tsne+verify+nbr' + sfx,   3,    0, '#1baf7a', '^', '-', 1.6),
-                ('t-SNE (6 acq.) + verify + neighbour search', tr, 'tsne+verify+nbr' + sfx,   6,    0, '#eda100', 'D', '-', 1.6),
-                ('t-SNE (3 acq.) + hierarchical',              tr, 'tsne+hierarchical' + sfx, 3,    0, '#e87ba4', 'v', '-', 1.6)]
+                ('t-SNE (6 acq.) + verify + neighbour search', tr, 'tsne+verify+nbr' + sfx,   6,    0, '#eda100', 'D', '-', 1.6)]
     """t-SNE pure and hybrids for one training; sfx = '[clusters]' (prior known) or '' (full codebook)."""
     return [(f't-SNE (LUT beam)',                 tr, 'tsne',                    None, 0, '#2a78d6', 'o', '-', 2.0),
             (f't-SNE + 2 neighbours',             tr, 'tsne+refine' + sfx,       None, 2, '#eb6834', 's', '-', 1.6),
             (f't-SNE + 4 neighbours',             tr, 'tsne+refine' + sfx,       None, 4, '#1baf7a', '^', '-', 1.6),
-            (f't-SNE + 6 neighbours',             tr, 'tsne+refine' + sfx,       None, 6, '#eda100', 'D', '-', 1.6),
-            (f't-SNE (K=3) + hierarchical',       tr, 'tsne+hierarchical' + sfx, 3,    0, '#e87ba4', 'v', '-', 1.6)]
+            (f't-SNE + 6 neighbours',             tr, 'tsne+refine' + sfx,       None, 6, '#eda100', 'D', '-', 1.6)]
 
 
 SEARCH_CL = [('greedy search, clusters only',       '-', 'greedy[clusters]',       None, 0, '#008300', 'P', '--', 1.6),
