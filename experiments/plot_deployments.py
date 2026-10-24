@@ -77,6 +77,9 @@ for pop, grp, gname in [('fullnlos', 'full NLOS', 'full-NLOS users'), ('nolos', 
                     xs, ys = curve(tab, tr, sc, Kf, R, met)
                     if xs:
                         a.plot(xs, ys, ls, color=col, marker=mk, ms=4, lw=lw)
+                if not curve(tab, 'informed', 'tsne', None, 0, met)[0]:      # e.g. joint training never run
+                    a.text(0.5, 0.92, 't-SNE not computed for this training\n(searches only: they need no training)',
+                           ha='center', va='top', transform=a.transAxes, color=MUTED, fontsize=8)
                 if met.startswith('beam'):                             # the t-SNE AoA estimate itself
                     xs, ys = curve(tab, 'informed', 'tsne', None, 0, met.replace('beam', 'tsne'))
                     if xs:
