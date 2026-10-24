@@ -21,7 +21,7 @@
 % without LoS; results split into full-NLOS and reflection-only users).
 % Environment: SDP_POP ("fullnlos,nolos"), SDP_SIZES ("60r,60,120,180,240"), SDP_KS ("1:15"),
 %   SDP_RS ("2,4,6"), SDP_SMAX (15), SDP_DRAWS (10), SDP_FOOT (0.15), SDP_NOISE (est_G60dB),
-%   SDP_WORKERS (48)
+%   SDP_WORKERS (48), SDP_NEWCHARTS (1; 0 = only cached t-SNE charts, missing K skipped)
 % Outputs: results_aoa/serving_deployments/<noise>/summary.csv
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -41,7 +41,8 @@ Smax  = str2double(envs('SDP_SMAX','15'));
 nDraw = str2double(envs('SDP_DRAWS','10'));
 foot  = str2double(envs('SDP_FOOT','0.15'));
 nW    = str2double(envs('SDP_WORKERS','48'));
-k0 = 2*pi/(3e8/30e9);  d = (3e8/30e9)/2;  lamc = 3e8/30e9;
+newCh = str2double(envs('SDP_NEWCHARTS','1'));                  % 0: only cached t-SNE charts (missing K skipped)
+k0 =2*pi/(3e8/30e9);  d = (3e8/30e9)/2;  lamc = 3e8/30e9;
 
 Data = load_dataset(params);
 U    = abl_users(Data, params);
@@ -112,6 +113,7 @@ for pp = pops
         for e = 1:2
             ent = unique(cell2mat(cellfun(@(c) cell2mat(c), P(e).lists(:,2).', 'UniformOutput', false)));
             cf = fullfile(root,'cache_ablations', sprintf('single_%s_e%d_%s_%s.mat', nz.name, e, pop, tag));
+            if ~newCh, Ra{e} = load_cache(cf); continue; end
             Ra{e} = alone_charts(load_cache(cf), cf, ent, A{e}(:, ch(e).users, :), Hd(:, ch(e).users), ch(e), ...
                                  sprintf('%s|single|e%d|%s', tag, e, pop), nz, params, pool, nW, Nb, Nr);
         end
@@ -125,7 +127,7 @@ for pp = pops
         for t = 1:3
             for dI = 1:numel(P(1).lists{t,2}), Pall = [Pall; P(1).lists{t,2}{dI}(:), P(2).lists{t,2}{dI}(:)]; end %#ok<AGROW>
         end
-        Rj = joint_charts(Rj, cfJ, unique(Pall,'rows','stable'), A, Hd, ch, nz, ctag, params, pool, nW, Nb, Nr, nU);
+        if newCh, Rj = joint_charts(Rj, cfJ, unique(Pall,'rows','stable'), A, Hd, ch, nz, ctag, params, pool, nW, Nb, Nr, nU); end
         fprintf('  charts ready (%.1f min)\n', toc(t0)/60);
 
         % ---- searches (independent of the training deployment): per EMS, then the joint view
@@ -172,6 +174,17 @@ for pp = pops
                     for dI = 1:numel(P(1).lists{t,2})
                         az = nan(nU,2);  ee = 1:2;
                         if ~strcmp(dep{1}, 'joint'), ee = sscanf(dep{1}, 'EMS%d'); end
+                        have = true;                                % all K charts cached?
+                        for e = ee
+                            li = P(e).lists{t,2}{dI}(1:K);
+                            if strcmp(dep{1}, 'joint')
+                                pr = zeros(K,2);  pr(:,e) = li;  pr(:,3-e) = P(3-e).lists{t,2}{dI}(1:K);
+                                have = have && all(arrayfun(@(q) isKey(Rj, nkey(nz.name, ctag, e, pr(q,:))), 1:K));
+                            else
+                                have = have && all(arrayfun(@(i) isKey(Ra{e}, sprintf('%d', i)), li));
+                            end
+                        end
+                        if ~have, continue; end
                         for e = ee
                             li = P(e).lists{t,2}{dI}(1:K);
                             if strcmp(dep{1}, 'joint')
