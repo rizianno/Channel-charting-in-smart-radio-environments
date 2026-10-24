@@ -20,6 +20,10 @@
 % LUT entry (full and [clusters]); training entries nested / informed / random (mean of draws).
 % Populations (SDP_POP): fullnlos (charts from full-NLOS users), nolos (charts from every user
 % without LoS; results split into full-NLOS and reflection-only users).
+% Monotone variants: 't-SNE + verify' (after each acquisition the proposed beam is measured and the
+% stronger kept, 2K sweeps) and, after K = 1, 3, 6 verified acquisitions, an incremental neighbour
+% search (+1, -1, +2, ... around the verified beam, best so far, SDP_TNB sweeps). Per-user records
+% (full NLOS, informed and coarse-to-fine training, K = 1, 3, 6) in per_user.csv.
 % Environment: SDP_POP ("fullnlos,nolos"), SDP_SIZES ("60r,60,120,180,240"), SDP_KS ("1:15"),
 %   SDP_RS ("2,4,6"), SDP_SMAX (15), SDP_DRAWS (10), SDP_FOOT (0.15), SDP_NOISE (est_G60dB),
 %   SDP_WORKERS (48), SDP_NEWCHARTS (1; 0 = only cached t-SNE charts, missing K skipped)
@@ -42,6 +46,7 @@ Smax  = str2double(envs('SDP_SMAX','15'));
 nDraw = str2double(envs('SDP_DRAWS','10'));
 foot  = str2double(envs('SDP_FOOT','0.15'));
 nW    = str2double(envs('SDP_WORKERS','48'));
+Tnb   = str2double(envs('SDP_TNB','20'));                       % neighbour-search sweeps after verify
 newCh = str2double(envs('SDP_NEWCHARTS','1'));                  % 0: only cached t-SNE charts (missing K skipped)
 k0 =2*pi/(3e8/30e9);  d = (3e8/30e9)/2;  lamc = 3e8/30e9;
 
@@ -58,7 +63,7 @@ pool = [];                                                      % only needed to
 if newCh, pool = gcp('nocreate'); if isempty(pool), pool = parpool('Processes', nW); end, end
 outDir = fullfile(root,'results_aoa','serving_deployments', nz.name);
 if ~exist(outDir,'dir'), mkdir(outDir); end
-rows = {};
+rows = {};  pu = {};                                            % pu: per-user rows (full NLOS)
 for pp = pops
     pop = pp{1};
     if strcmp(pop,'nolos'), popU = find(~los); else, popU = find(~U.has_direct); end   % order as the earlier runs
@@ -175,6 +180,7 @@ for pp = pops
         for dep = {'EMS1 alone', 'EMS2 alone', 'joint'}
             for t = 1:3
                 tr = P(1).lists{t,1};
+                bvS = cell(numel(P(1).lists{t,2}), 1);              % t-SNE + verify: current beams per draw
                 for K = Ks
                     rr = {};
                     for dI = 1:numel(P(1).lists{t,2})
@@ -206,7 +212,22 @@ for pp = pops
                         lut = [lut1(az(:,1), specular(1), step), lut1(az(:,2), specular(2), step)];
                         lpos = cell(1,2);
                         for e = 1:2, [~, lpos{e}] = min(abs(ub{e}(lut(:,e)).' - ub{e}(P(e).Sup)), [], 2); end
-                        sch = {'tsne', 0, K, @(e) lut(:,e)};
+                        if isempty(bvS{dI}), bvS{dI} = {lut(:,1), lut(:,2)};       % measure the proposed beam,
+                        else                                                   % keep the stronger (per EMS)
+                            for e = 1:2
+                                up = G{e}((lut(:,e)-1)*nU + (1:nU).') > G{e}((bvS{dI}{e}-1)*nU + (1:nU).');
+                                bvS{dI}{e}(up) = lut(up,e);
+                            end
+                        end
+                        bv = bvS{dI};
+                        sch = {'tsne', 0, K, @(e) lut(:,e); 'tsne+verify', 0, 2*K, @(e) bv{e}};
+                        if ismember(K, [1 3 6])                         % + incremental neighbour search
+                            nb = nbr_search(G, bv, {P(1).Sup, P(2).Sup}, N, Tnb);
+                            for tt = 1:Tnb
+                                sch(end+1,:) = {'tsne+verify+nbr', 0, 2*K + tt, @(e) nb.full{tt,e}}; %#ok<AGROW>
+                                sch(end+1,:) = {'tsne+verify+nbr[clusters]', 0, 2*K + tt, @(e) nb.cl{tt,e}}; %#ok<AGROW>
+                            end
+                        end
                         for R = Rs
                             sch(end+1,:) = {'tsne+refine', R, K+R+1, @(e) best1(G{e}, nbr(lut(:,e), R, N))}; %#ok<AGROW>
                             sch(end+1,:) = {'tsne+refine[clusters]', R, K+R+1, @(e) best1(G{e}, P(e).Sup(nbr(lpos{e}, R, numel(P(e).Sup))))}; %#ok<AGROW>
@@ -230,6 +251,21 @@ for pp = pops
                                          {aBe{1}, mE{1}, aBe{2}, mE{2}}, {aTe{1}, mE{1}, aTe{2}, mE{2}});
                             end
                         end
+                        if strcmp(pop,'fullnlos') && dI == 1 && ismember(K, [1 3 6]) && ~strcmp(tr,'random')
+                            for e = ee                                  % per-user record for maps / CDFs
+                                m = scoredE{e} & snrE(e, exh{e}).' > 0;  ix = find(reach(:,e));
+                                g = @(i) 10*log10(snrE(e, i).' ./ base{e}.');
+                                sw = {K, 2*K};  sG = cell(1,2);  sH = cell(1,2);
+                                for k2 = 1:2
+                                    sG{k2} = g(best1(G{e}, repmat(P(e).sq(1:sw{k2}), nU, 1)));
+                                    sH{k2} = g(P(e).Sup(hier1(G{e}(:,P(e).Sup), numel(P(e).Sup), sw{k2})).');
+                                end
+                                gL = g(lut(:,e));  gV = g(bv{e});  aT = abs(mod(az(:,e) - azTrue(:,e) + 180, 360) - 180);
+                                pu = [pu; repmat({tag, dep{1}, sprintf('EMS%d', e), tr, K}, numel(ix), 1), ...
+                                      num2cell([popU(ix), U.xy(popU(ix),:), isAnch(ix,e), m(ix), azTrue(ix,e), az(ix,e), aT(ix), ...
+                                                lut(ix,e), bv{e}(ix), gL(ix), gV(ix), sG{1}(ix), sH{1}(ix), sG{2}(ix), sH{2}(ix)])]; %#ok<AGROW>
+                            end
+                        end
                     end
                     rows = [rows; avg_rows(rr, 14:25, 5:11)]; %#ok<AGROW>
                 end
@@ -238,6 +274,11 @@ for pp = pops
         end
         clear A G
         write_table(outDir, rows);
+        if ~isempty(pu)
+            writetable(cell2table(pu, 'VariableNames', {'surface','deployment','view','training','K','user','x_m','y_m', ...
+                'anchor','scored','az_true_deg','az_est_deg','aoa_err_deg','beam_lut','beam_verify','dsnr_lut_dB','dsnr_verify_dB', ...
+                'dsnr_greedy_cl_K_dB','dsnr_hier_cl_K_dB','dsnr_greedy_cl_2K_dB','dsnr_hier_cl_2K_dB'}), fullfile(outDir,'per_user.csv'));
+        end
     end
 end
 fprintf('\n=== DONE (%.1f min) ===\n', toc(t0)/60);
@@ -380,6 +421,25 @@ function err = beam_err(u, az, hw)
     ut = sind(az);  C = [u, u - 2, u + 2];  C(abs(C) > 1 + hw) = NaN;
     [~, k] = min(abs(C - ut), [], 2);  u2 = C(sub2ind(size(C), (1:numel(u)).', k));
     err = abs(asind(min(max(u2, -1), 1)) - az);
+end
+
+function nb = nbr_search(G, b0, Sup, N, T)
+% incremental neighbour search per EMS from the verified beams b0: sweep t probes the codeword at
+% offset +1, -1, +2, -2, ... from b0 (full codebook) or from b0's position in the cluster support
+% ([clusters]), keeping the best measured so far (as Main_AoA_Serving_JointChart)
+    off = reshape([1:ceil(T/2); -(1:ceil(T/2))], 1, []);  off = off(1:T);
+    nb.full = cell(T,2);  nb.cl = cell(T,2);
+    for e = 1:2
+        g = G{e};  n = size(g,1);  S = Sup{e};  Ns = numel(S);
+        [~, p0] = min(abs(b0{e} - S), [], 2);
+        bf = b0{e};  bc = b0{e};
+        for t = 1:T
+            c = mod(b0{e} - 1 + off(t), N) + 1;
+            up = g((c-1)*n + (1:n).') > g((bf-1)*n + (1:n).');  bf(up) = c(up);  nb.full{t,e} = bf;
+            c = S(mod(p0 - 1 + off(t), Ns) + 1).';
+            up = g((c-1)*n + (1:n).') > g((bc-1)*n + (1:n).');  bc(up) = c(up);  nb.cl{t,e} = bc;
+        end
+    end
 end
 
 function x = select_chart(E, QT, nA, lab)
