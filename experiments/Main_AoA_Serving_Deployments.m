@@ -13,7 +13,8 @@
 %   joint       : (joint deployment only) both EMSs steered, SNR served by both, users reached by
 %                 at least one EMS; angle errors pooled over both EMSs (every user-EMS pair).
 % So "EMS1 alone" and "joint, EMS1 view" differ only in the training data.
-% Schemes (sweeps up to SDP_SMAX): greedy, hierarchical (full codebook and [clusters] = entries
+% Schemes (sweeps up to SDP_SMAX; all incremental: each budget contains the previous one): greedy,
+% hierarchical (full codebook and [clusters] = entries
 % within 2 beamwidths of an anchor), exhaustive; t-SNE (per-user selection of the chart with the
 % highest label-free trustworthiness) -> LUT, + R neighbours, + hierarchical warm-started at the
 % LUT entry (full and [clusters]); training entries nested / informed / random (mean of draws).
@@ -443,8 +444,11 @@ function c = nbr(b, R, N)
 end
 
 function b = hier1(g, N, s)
-    n = size(g,1);  spr = @(k) unique(round((2*(1:k) - 1) * N / (2*k)));
-    b = best1(g, repmat(spr(min(s,4)), n, 1));  used = min(s,4);  delta = N/4;
+% hierarchical search, incremental (design B): the first min(s,4) probes are the first entries of
+% one fixed ever-finer order (N/2, N, N/4, 3N/4: uniform on the circle once all four are taken),
+% then +-delta around the best so far, delta halved; every budget contains the previous one
+    n = size(g,1);  o = nest_order(N);
+    b = best1(g, repmat(o(1:min(s,4)), n, 1));  used = min(s,4);  delta = N/4;
     while used < s && delta > 1
         delta = ceil(delta/2);
         for sgn = [-1 1]
