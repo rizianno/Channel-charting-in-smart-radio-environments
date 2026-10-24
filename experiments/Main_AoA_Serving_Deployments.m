@@ -24,11 +24,13 @@
 % Monotone variants: 't-SNE + verify' (after each acquisition the proposed beam is measured and the
 % stronger kept, 2K sweeps) and, after K = 1, 3, 6 verified acquisitions, an incremental neighbour
 % search (+1, -1, +2, ... around the verified beam, best so far, SDP_TNB sweeps). Per-user records
-% (full NLOS, informed and coarse-to-fine training, K = 1, 3, 6) in per_user.csv.
+% (full NLOS, informed and coarse-to-fine training, K in SDP_PUKS) in per_user.csv.
+% Searches (hierarchical, and hierarchical warm-started at the LUT entry) never measure a codeword twice.
 % Environment: SDP_POP ("fullnlos,nolos"), SDP_SIZES ("60r,60,120,180,240"), SDP_KS ("1:15"),
 %   SDP_RS ("2,4,6"), SDP_SMAX (15), SDP_DRAWS (10), SDP_FOOT (0.15), SDP_NOISE (est_G60dB),
-%   SDP_WORKERS (48), SDP_NEWCHARTS (1; 0 = only cached t-SNE charts, missing K skipped)
-% Outputs: results_aoa/serving_deployments/<noise>/summary.csv
+%   SDP_WORKERS (48), SDP_NEWCHARTS (1; 0 = only cached t-SNE charts, missing K skipped),
+%   SDP_PUKS ("1,3,6": K of the per-user records), SDP_OUTSUB ("": subfolder of the outputs)
+% Outputs: results_aoa/serving_deployments/<noise>[/<SDP_OUTSUB>]/summary.csv, per_user.csv
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 clc; clear; close all;
@@ -49,6 +51,7 @@ foot  = str2double(envs('SDP_FOOT','0.15'));
 nW    = str2double(envs('SDP_WORKERS','48'));
 Tnb   = str2double(envs('SDP_TNB','20'));                       % neighbour-search sweeps after verify
 newCh = str2double(envs('SDP_NEWCHARTS','1'));                  % 0: only cached t-SNE charts (missing K skipped)
+puKs  = eval(['[' envs('SDP_PUKS','1,3,6') ']']);               % K of the per-user records
 k0 =2*pi/(3e8/30e9);  d = (3e8/30e9)/2;  lamc = 3e8/30e9;
 
 Data = load_dataset(params);
@@ -62,7 +65,7 @@ azBS = compute_ems_azimuth(U.BS_position(1:2), U.EMS_position, params);  specula
 
 pool = [];                                                      % only needed to compute new charts
 if newCh, pool = gcp('nocreate'); if isempty(pool), pool = parpool('Processes', nW); end, end
-outDir = fullfile(root,'results_aoa','serving_deployments', nz.name);
+outDir = fullfile(root,'results_aoa','serving_deployments', nz.name, envs('SDP_OUTSUB',''));
 if ~exist(outDir,'dir'), mkdir(outDir); end
 rows = {};  pu = {};                                            % pu: per-user rows (full NLOS)
 for pp = pops
@@ -253,7 +256,7 @@ for pp = pops
                                          {aBe{1}, mE{1}, aBe{2}, mE{2}}, {aTe{1}, mE{1}, aTe{2}, mE{2}});
                             end
                         end
-                        if strcmp(pop,'fullnlos') && dI == 1 && ismember(K, [1 3 6]) && ~strcmp(tr,'random')
+                        if strcmp(pop,'fullnlos') && dI == 1 && ismember(K, puKs) && ~strcmp(tr,'random')
                             for e = ee                                  % per-user record for maps / CDFs
                                 m = scoredE{e} & snrE(e, exh{e}).' > 0;  ix = find(reach(:,e));
                                 g = @(i) 10*log10(snrE(e, i).' ./ base{e}.');
@@ -521,31 +524,38 @@ end
 function b = hier1(g, N, s)
 % hierarchical search, incremental (design B): the first min(s,4) probes are the first entries of
 % one fixed ever-finer order (N/2, N, N/4, 3N/4: uniform on the circle once all four are taken),
-% then +-delta around the best so far, delta halved; every budget contains the previous one
-    n = size(g,1);  o = nest_order(N);
-    b = best1(g, repmat(o(1:min(s,4)), n, 1));  used = min(s,4);  delta = N/4;
-    while used < s && delta > 1
-        delta = ceil(delta/2);
-        for sgn = [-1 1]
-            if used >= s, break; end
-            cand = mod(b - 1 + sgn*delta, N) + 1;
-            better = g((cand-1)*n + (1:n).') > g((b-1)*n + (1:n).');
-            b(better) = cand(better);  used = used + 1;
-        end
-    end
+% then +-delta around the best so far, delta halved; every budget contains the previous one.
+% A codeword already measured is not measured again: that candidate is skipped, no sweep spent
+% (before, after a -delta win the +delta probe fell back on the previous best and cost a sweep).
+    n = size(g,1);  o = nest_order(N);  p0 = o(1:min([s, 4, numel(o)]));
+    b = best1(g, repmat(p0, n, 1));
+    seen = false(n, N);  seen(:, p0) = true;
+    ds = [];  d = N/4;
+    while d > 1, d = ceil(d/2);  ds(end+1) = d; end %#ok<AGROW>
+    b = ladder(g, b, N, seen, numel(p0) * ones(n,1), s, ds);
 end
 
 function b = warm1(g, b, N, budget, delta0)
-    n = size(g,1);  used = 1;  delta = delta0;
-    while used < budget && delta >= 1
-        for sgn = [-1 1]
-            if used >= budget, break; end
-            cand = mod(b - 1 + sgn*delta, N) + 1;
-            better = g((cand-1)*n + (1:n).') > g((b-1)*n + (1:n).');
-            b(better) = cand(better);  used = used + 1;
-        end
-        if delta == 1, break; end
-        delta = ceil(delta/2);
+% hierarchical search warm-started at b (that measurement is the first sweep): +-delta around the
+% best so far, delta halved down to 1; a codeword already measured is skipped (no sweep spent)
+    n = size(g,1);  seen = false(n, N);  seen(sub2ind([n N], (1:n).', b(:))) = true;
+    ds = [];  d = delta0;
+    while d >= 1, ds(end+1) = d; if d == 1, break; end, d = ceil(d/2); end %#ok<AGROW>
+    b = ladder(g, b(:), N, seen, ones(n,1), budget, ds);
+end
+
+function b = ladder(g, b, N, seen, used, budget, ds)
+% per user: -delta then +delta around the best so far for each delta in ds, keeping the better;
+% a candidate already measured is skipped; stops when the user's budget is spent
+    n = size(g,1);  r = (1:n).';
+    for t = 1:2*numel(ds)
+        sgn = 1 - 2*mod(t, 2);                              % t odd: -delta, t even: +delta
+        c = mod(b - 1 + sgn*ds(ceil(t/2)), N) + 1;
+        ic = sub2ind([n N], r, c);
+        act = used < budget & ~seen(ic);
+        seen(ic(act)) = true;  used(act) = used(act) + 1;
+        better = act & g(ic) > g(sub2ind([n N], r, b));
+        b(better) = c(better);
     end
 end
 
