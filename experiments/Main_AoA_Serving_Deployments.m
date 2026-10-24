@@ -11,7 +11,7 @@
 %                 users it reaches; angle = pointing error of the chosen beam (and, for t-SNE,
 %                 the error of the estimated AoA itself);
 %   joint       : (joint deployment only) both EMSs steered, SNR served by both, users reached by
-%                 at least one EMS.
+%                 at least one EMS; angle errors pooled over both EMSs (every user-EMS pair).
 % So "EMS1 alone" and "joint, EMS1 view" differ only in the training data.
 % Schemes (sweeps up to SDP_SMAX): greedy, hierarchical (full codebook and [clusters] = entries
 % within 2 beamwidths of an anchor), exhaustive; t-SNE (per-user selection of the chart with the
@@ -106,7 +106,7 @@ for pp = pops
         snrJ = @(i1, i2) rho * lmax(Hd + pick(A{1}, i1) + pick(A{2}, i2));
         azTrue = U.az(popU, :);
         beamAz = @(e, i) asind(ub{e}(i(:))).';
-        grpOf = @(m) {'full NLOS', m & isNone; 'reflection only', m & ~isNone};
+        grpOf = @(m) {'full NLOS', m & isNone, isNone; 'reflection only', m & ~isNone, ~isNone};
 
         % ---- charts: EMS alone (per entry) and joint (per pair), from caches or computed
         Ra = cell(1,2);
@@ -145,15 +145,17 @@ for pp = pops
         for q = 1:size(srch,1)
             sw = 1:Smax;  if startsWith(srch{q,1},'exhaustive'), sw = 0; end
             for s = sw
-                ii = {srch{q,2}(1, s), srch{q,2}(2, s)};
+                ii = {srch{q,2}(1, s), srch{q,2}(2, s)};  aeE = cell(1,2);  mE = cell(1,2);
                 for e = 1:2
                     m = scoredE{e} & snrE(e, exh{e}).' > 0;
                     ae = abs(mod(beamAz(e, ii{e}) - azTrue(:,e) + 180, 360) - 180);
+                    aeE{e} = ae;  mE{e} = m;
                     for dep = {sprintf('EMS%d alone', e), 'joint'}
                         rows = add(rows, dep{1}, sprintf('EMS%d', e), '-', srch{q,1}, 0, 0, s, snrE(e, ii{e}), base{e}, m, ae, nan(nU,1));
                     end
                 end
-                rows = add(rows, 'joint', 'joint', '-', srch{q,1}, 0, 0, s, snrJ(ii{1}, ii{2}), baseJ, okJ, nan(nU,1), nan(nU,1));
+                rows = add(rows, 'joint', 'joint', '-', srch{q,1}, 0, 0, s, snrJ(ii{1}, ii{2}), baseJ, okJ, ...
+                           {aeE{1}, mE{1}, aeE{2}, mE{2}}, nan(nU,1));                   % angles pooled over both EMSs
             end
         end
         lutT = [lut1(azTrue(:,1), specular(1), step), lut1(azTrue(:,2), specular(2), step)];
@@ -211,15 +213,17 @@ for pp = pops
                         end
                         for q = 1:size(sch,1)
                             if sch{q,3} > Smax, continue; end
-                            ii = {sch{q,4}(1), sch{q,4}(2)};
+                            ii = {sch{q,4}(1), sch{q,4}(2)};  aBe = cell(1,2);  aTe = cell(1,2);  mE = cell(1,2);
                             for e = ee
                                 m = scoredE{e} & snrE(e, exh{e}).' > 0;
                                 aB = abs(mod(beamAz(e, ii{e}) - azTrue(:,e) + 180, 360) - 180);
                                 aT = abs(mod(az(:,e) - azTrue(:,e) + 180, 360) - 180);
+                                aBe{e} = aB;  aTe{e} = aT;  mE{e} = m;
                                 rr = add(rr, dep{1}, sprintf('EMS%d', e), tr, sch{q,1}, K, sch{q,2}, sch{q,3}, snrE(e, ii{e}), base{e}, m, aB, aT);
                             end
-                            if strcmp(dep{1}, 'joint')
-                                rr = add(rr, 'joint', 'joint', tr, sch{q,1}, K, sch{q,2}, sch{q,3}, snrJ(ii{1}, ii{2}), baseJ, okJ, nan(nU,1), nan(nU,1));
+                            if strcmp(dep{1}, 'joint')                     % angles pooled over both EMSs
+                                rr = add(rr, 'joint', 'joint', tr, sch{q,1}, K, sch{q,2}, sch{q,3}, snrJ(ii{1}, ii{2}), baseJ, okJ, ...
+                                         {aBe{1}, mE{1}, aBe{2}, mE{2}}, {aTe{1}, mE{1}, aTe{2}, mE{2}});
                             end
                         end
                     end
@@ -249,12 +253,16 @@ end
 
 function r = collect2(key, snr, base, grp, angB, angT)
 % one row per group: key (11 fields), group, n, SNR gain median/mean/p10, SNR median, beam and
-% t-SNE angle error median/RMSE/p90, mean SE and its gain, 1 (draw count), placeholder
+% t-SNE angle error median/RMSE/p90, mean SE and its gain, 1 (draw count), placeholder.
+% angB / angT: per-user errors (masked by the group), or {err1, mask1, err2, mask2} = pooled over
+% both EMSs (every user-EMS pair of the group, each with its own EMS mask)
     r = {};
+    pool2 = @(a, G) [a{1}(a{2} & G); a{3}(a{4} & G)];
     for gi = 1:size(grp,1)
         m = grp{gi,2};  if ~any(m), continue; end
         x = snr(m);  b = base(m);  dd = 10*log10(x(:) ./ b(:));  dd = dd(isfinite(dd));
-        aB = angB(m);  aT = angT(m);
+        if iscell(angB), aB = pool2(angB, grp{gi,3}); else, aB = angB(m); end
+        if iscell(angT), aT = pool2(angT, grp{gi,3}); else, aT = angT(m); end
         r(end+1,:) = [key, {grp{gi,1}, nnz(m), median(dd), mean(dd), prctile(dd,10), median(10*log10(x)), ...
             median(aB), sqrt(mean(aB.^2)), prctile(aB,90), median(aT), sqrt(mean(aT.^2)), prctile(aT,90), ...
             mean(log2(1+x)), mean(log2(1+x) - log2(1+b)), 1, 0}]; %#ok<AGROW>

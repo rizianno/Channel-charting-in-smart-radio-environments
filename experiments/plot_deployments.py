@@ -2,7 +2,7 @@
 
 One figure per user subset (full NLOS, reflection only) and surface. Rows: median and RMSE of the
 pointing error of the chosen beam, median SNR gain. Columns: EMS1 alone, EMS2 alone, joint training
-seen from EMS1, from EMS2, and both EMSs serving together. Solid lines: t-SNE (informed training)
+seen from EMS1, from EMS2, and both EMSs serving together (angles pooled over both EMSs). Solid lines: t-SNE (informed training)
 pure and hybrid; dashed: searches (clusters only, and full-codebook hierarchical); thin grey: pure
 t-SNE with random and nested training; dotted blue: the t-SNE AoA estimate itself.
 Usage: python experiments/plot_deployments.py results_aoa/serving_deployments/est_G60dB
@@ -42,7 +42,7 @@ SERIES = [
 ]
 COLS = [('EMS1 alone', 'EMS1', 'EMS1 trained alone'), ('EMS2 alone', 'EMS2', 'EMS2 trained alone'),
         ('joint', 'EMS1', 'joint training, EMS1 view'), ('joint', 'EMS2', 'joint training, EMS2 view'),
-        ('joint', 'joint', 'joint training, both EMSs serving')]
+        ('joint', 'joint', 'joint training, both EMSs serving\n(angles pooled over EMS1 and EMS2)')]
 ROWS = [('beam_err_median_deg', 'median angle error [deg]'), ('beam_err_rmse_deg', 'RMSE angle error [deg]'),
         ('dsnr_median_dB', 'median SNR gain [dB]')]
 SURF = {'M60_raytraced': 'real 60x60', 'M60': '60x60 (synthetic)', 'M120': '120x120 (synthetic)',
@@ -73,10 +73,6 @@ for pop, grp, gname in [('fullnlos', 'full NLOS', 'full-NLOS users'), ('nolos', 
                 a = ax[r, c]
                 if r == 0:
                     a.set_title(ctitle, color=INK, fontsize=10)
-                if view == 'joint' and met.startswith('beam'):
-                    a.text(0.5, 0.5, 'no single angle when both EMSs serve:\nsee the EMS1 / EMS2 views', ha='center',
-                           va='center', transform=a.transAxes, color=MUTED)
-                    continue
                 for lab, tr, sc, Kf, R, col, mk, ls, lw in SERIES:
                     xs, ys = curve(tab, tr, sc, Kf, R, met)
                     if xs:
