@@ -31,10 +31,18 @@ for x in csv.DictReader(open(os.path.join(D, 'summary.csv'))):
     k = (x['population'], x['surface'], x['deployment'], x['view'], x['group'])
     T[k][(x['training'], x['scheme'], int(x['K']), int(x['R']), int(x['sweeps']))] = x
 
-SW = list(range(1, 16))
+MONO = any(k[1].startswith('tsne+verify+nbr') for t in T.values() for k in t)   # only never-worse curves
+NOGREEDY = os.environ.get('PDP_NOGREEDY', '0') == '1'
+SW = list(range(1, int(os.environ.get('PDP_XMAX', '30' if MONO else '15')) + 1))
 
 
 def tsne_series(tr, sfx, name):
+    if MONO:                                                   # every beam measured: SNR never drops
+        return [('t-SNE + verify (proposed beam measured)',     tr, 'tsne+verify',             None, 0, '#2a78d6', 'o', '-', 2.0),
+                ('t-SNE (1 acq.) + verify + neighbour search', tr, 'tsne+verify+nbr' + sfx,   1,    0, '#eb6834', 's', '-', 1.6),
+                ('t-SNE (3 acq.) + verify + neighbour search', tr, 'tsne+verify+nbr' + sfx,   3,    0, '#1baf7a', '^', '-', 1.6),
+                ('t-SNE (6 acq.) + verify + neighbour search', tr, 'tsne+verify+nbr' + sfx,   6,    0, '#eda100', 'D', '-', 1.6),
+                ('t-SNE (3 acq.) + hierarchical',              tr, 'tsne+hierarchical' + sfx, 3,    0, '#e87ba4', 'v', '-', 1.6)]
     """t-SNE pure and hybrids for one training; sfx = '[clusters]' (prior known) or '' (full codebook)."""
     return [(f't-SNE (LUT beam)',                 tr, 'tsne',                    None, 0, '#2a78d6', 'o', '-', 2.0),
             (f't-SNE + 2 neighbours',             tr, 'tsne+refine' + sfx,       None, 2, '#eb6834', 's', '-', 1.6),
@@ -51,8 +59,8 @@ SEARCH_FULL = [('greedy search, full codebook',       '-', 'greedy',            
 VARIANTS = [
     ('0_all_combined', 'informed t-SNE (solid) vs searches (dashed), grey = pure t-SNE with other trainings', 'informed',
      tsne_series('informed', '[clusters]', 'informed') + SEARCH_CL + [SEARCH_FULL[1]] +
-     [('t-SNE, random training',         'random', 'tsne', None, 0, '#9a998f', 's', '-', 1.0),
-      ('t-SNE, coarse-to-fine training', 'nested', 'tsne', None, 0, '#c3c2b7', '^', '-', 1.0)]),
+     [('t-SNE' + (' + verify' if MONO else '') + ', random training',         'random', 'tsne+verify' if MONO else 'tsne', None, 0, '#9a998f', 's', '-', 1.0),
+      ('t-SNE' + (' + verify' if MONO else '') + ', coarse-to-fine training', 'nested', 'tsne+verify' if MONO else 'tsne', None, 0, '#c3c2b7', '^', '-', 1.0)]),
     ('1_informed_prior', 'angle prior known: informed t-SNE training, hybrids and searches within the user clusters',
      'informed', tsne_series('informed', '[clusters]', 'informed') + SEARCH_CL),
     ('2_no_prior_coarse_to_fine', 'no prior: coarse-to-fine t-SNE training, hybrids and searches over the full codebook',
@@ -97,13 +105,15 @@ for folder, vtitle, main, series in VARIANTS:
                     if r == 0:
                         a.set_title(ctitle, color=INK, fontsize=10)
                     for lab, tr, sc, Kf, R, col, mk, ls, lw in series:
+                        if NOGREEDY and sc.startswith('greedy'):
+                            continue
                         xs, ys = curve(tab, tr, sc, Kf, R, met)
                         if xs:
                             a.plot(xs, ys, ls, color=col, marker=mk, ms=4, lw=lw)
                     if not curve(tab, main, 'tsne', None, 0, met)[0]:          # e.g. joint training never run
                         a.text(0.5, 0.92, 't-SNE not computed for this training\n(searches only: they need no training)',
                                ha='center', va='top', transform=a.transAxes, color=MUTED, fontsize=8)
-                    if met.startswith('beam'):                                 # the t-SNE AoA estimate itself
+                    if met.startswith('beam') and not MONO:                    # the t-SNE AoA estimate itself
                         xs, ys = curve(tab, main, 'tsne', None, 0, met.replace('beam', 'tsne'))
                         if xs:
                             a.plot(xs, ys, ':', color='#2a78d6', lw=1.4)
@@ -111,14 +121,16 @@ for folder, vtitle, main, series in VARIANTS:
                         ex = exhaustive(tab, met)
                         if ex is not None:
                             a.axhline(ex, color=INK, lw=1, ls=':')
-                            a.text(15, ex, 'exhaustive', ha='right', va='bottom', color=MUTED, fontsize=8)
+                            a.text(max(SW), ex, 'exhaustive', ha='right', va='bottom', color=MUTED, fontsize=8)
                     if c == 0:
                         a.set_ylabel(ylab)
                     if r == len(ROWS) - 1:
                         a.set_xlabel('total sweeps')
-                    a.set_xticks(SW[::2])
+                    a.set_xticks([1] + list(range(5, max(SW) + 1, 5)) if MONO else SW[::2])
             h = [Line2D([], [], color=col, marker=mk, ls=ls, lw=lw, label=lab) for lab, tr, sc, Kf, R, col, mk, ls, lw in series]
-            h.append(Line2D([], [], color='#2a78d6', ls=':', lw=1.4, label='t-SNE AoA estimate (angle rows)'))
+            h = [x for x in h if not (NOGREEDY and x.get_label().startswith('greedy'))]
+            if not MONO:
+                h.append(Line2D([], [], color='#2a78d6', ls=':', lw=1.4, label='t-SNE AoA estimate (angle rows)'))
             fig.legend(handles=h, loc='upper center', ncol=6, frameon=False, bbox_to_anchor=(0.5, 1.0), fontsize=9)
             fig.suptitle(f'{gname}, surface {sname}: {vtitle}', y=1.05, color=INK, fontsize=12)
             fig.tight_layout(rect=(0, 0, 1, 0.93))
@@ -126,6 +138,7 @@ for folder, vtitle, main, series in VARIANTS:
             for attempt in range(5):                               # OneDrive may briefly lock the file
                 try:
                     fig.savefig(os.path.join(out, fn), dpi=100, bbox_inches='tight')
+                    fig.savefig(os.path.join(out, fn.replace('.png', '.pdf')), bbox_inches='tight')
                     break
                 except OSError:
                     time.sleep(2)
