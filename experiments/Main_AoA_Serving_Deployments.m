@@ -54,7 +54,8 @@ los = U.has_direct & 10*log10(Pd ./ (lamc./(4*pi*dd)).^2) > -36;
 rho = 10^((nz.tx_dBm - nz.noise_dBm)/10);
 azBS = compute_ems_azimuth(U.BS_position(1:2), U.EMS_position, params);  specular = -azBS;
 
-pool = gcp('nocreate');  if isempty(pool), pool = parpool('Processes', nW); end
+pool = [];                                                      % only needed to compute new charts
+if newCh, pool = gcp('nocreate'); if isempty(pool), pool = parpool('Processes', nW); end, end
 outDir = fullfile(root,'results_aoa','serving_deployments', nz.name);
 if ~exist(outDir,'dir'), mkdir(outDir); end
 rows = {};
