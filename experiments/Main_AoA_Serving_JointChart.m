@@ -16,7 +16,11 @@
 % (K^2), + R neighbours (K^2 + R + 1), + hierarchical warm start (K^2 + b), searches (greedy,
 % hierarchical; full codebook and [clusters]), exhaustive. Charts cached per pair (training
 % independent): a larger K later only computes the new pairs.
-% Environment: SJC_SIZES ("60r,60,120,180,240"), SJC_KS ("1:8"), SJC_RS ("2,4,6"), SJC_BMAX (16,
+% SJC_ORDER = shell: the same K x K pairs evaluated after every single acquisition n = 1..Kmax^2, in
+% shell order (the (K-1) x (K-1) grid grows to K x K by adding (K,1), (1,K), (K,2), (2,K), ..., (K,K)),
+% so n = K^2 reproduces the K x K grid and both EMSs get new codewords at the same rate. Results in
+% results_aoa/serving_joint_chart/<noise>/figures/shell_order/ (column K = n acquisitions).
+% Environment: SJC_ORDER (grid | shell), SJC_SIZES ("60r,60,120,180,240"), SJC_KS ("1:8"), SJC_RS ("2,4,6"), SJC_BMAX (16,
 %   hierarchical sweeps after training), SJC_FOOT (0.15), SJC_NOISE (est_G60dB), SJC_WORKERS (40)
 % Outputs: results_aoa/serving_joint_chart/<noise>/summary.csv
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -35,6 +39,7 @@ Rs    = str2double(strsplit(envs('SJC_RS','2,4,6'), ','));
 Bmax  = str2double(envs('SJC_BMAX','16'));
 foot  = str2double(envs('SJC_FOOT','0.15'));
 nW    = str2double(envs('SJC_WORKERS','40'));
+order = envs('SJC_ORDER','grid');
 Smax  = Kmax^2 + max([Rs + 1, Bmax]);                           % searches up to the longest hybrid
 k0 = 2*pi/(3e8/30e9);  d = (3e8/30e9)/2;
 
@@ -58,8 +63,9 @@ fit = fit_model(Data, U, popU, xyz, M0, d, k0);
 fprintf('Joint chart: %d full-NLOS users reached by an EMS (EMS1 %d, EMS2 %d, both %d), %d anchors, perplexity %d\n', ...
         nC, nnz(reach(:,1)), nnz(reach(:,2)), nnz(all(reach,2)), nA, perp);
 
-pool = gcp('nocreate');  if isempty(pool), pool = parpool('Processes', nW); end
+pool = [];                                                      % started only if a chart is missing
 outDir = fullfile(root,'results_aoa','serving_joint_chart', nz.name);
+if strcmp(order,'shell'), outDir = fullfile(outDir, 'figures', 'shell_order'); end
 if ~exist(outDir,'dir'), mkdir(outDir); end
 rows = {};
 for sz = sizes
@@ -84,7 +90,11 @@ for sz = sizes
     P = zeros(0,2);
     for tr = {'c2f','informed'}, [ga, gb] = ndgrid(lists.(tr{1}){1}, lists.(tr{1}){2}); P = [P; ga(:) gb(:)]; end %#ok<AGROW>
     cf = fullfile(root,'cache_ablations', sprintf('jointchart_%s_%s.mat', nz.name, tag));
-    Rj = joint2d_charts(load_cache(cf), cf, unique(P,'rows','stable'), A, Hd, cu, lab, nA, perp, nz, tag, params, pool, nW, Nb, Nr, nU);
+    Rj = load_cache(cf);  P = unique(P,'rows','stable');
+    if ~all(arrayfun(@(q) isKey(Rj, sprintf('%d_%d', P(q,:))), 1:size(P,1)))
+        if isempty(pool), pool = gcp('nocreate'); if isempty(pool), pool = parpool('Processes', nW); end, end
+        Rj = joint2d_charts(Rj, cf, P, A, Hd, cu, lab, nA, perp, nz, tag, params, pool, nW, Nb, Nr, nU);
+    end
     fprintf('  charts ready (%.1f min)\n', toc(t0)/60);
 
     % ---- views and searches
@@ -117,9 +127,15 @@ for sz = sizes
     end
 
     % ---- t-SNE joint chart, K x K training, per-user selection; hybrids per EMS
+    if strcmp(order,'shell'), steps = 1:Kmax^2; else, steps = Ks; end
     for tr = {'c2f','informed'}
-        for K = Ks
-            [ga, gb] = ndgrid(lists.(tr{1}){1}(1:K), lists.(tr{1}){2}(1:K));  Pk = [ga(:) gb(:)];  nAcq = size(Pk,1);
+        for K = steps
+            if strcmp(order,'shell')                                % first K acquisitions of the shell order
+                ij = shell_order(Kmax);  Pk = [lists.(tr{1}){1}(ij(1:K,1)).', lists.(tr{1}){2}(ij(1:K,2)).'];
+            else
+                [ga, gb] = ndgrid(lists.(tr{1}){1}(1:K), lists.(tr{1}){2}(1:K));  Pk = [ga(:) gb(:)];
+            end
+            nAcq = size(Pk,1);
             outs = Rj(sprintf('%d_%d', Pk(1,:)));
             for q = 2:nAcq, outs(q) = Rj(sprintf('%d_%d', Pk(q,:))); end
             est = select2d(outs, nA, lab);                          % nC x 2
@@ -188,6 +204,15 @@ function write_table(outDir, rows)
         'tsne_err_median_deg','tsne_err_rmse_deg','tsne_err_p90_deg','se_mean','x'});
     T.x = [];
     writetable(T, fullfile(outDir,'summary.csv'));
+end
+
+function ij = shell_order(Kmax)
+% (i, j) index pairs: the (K-1) x (K-1) grid grows to K x K via (K,1), (1,K), (K,2), (2,K), ..., (K,K)
+    ij = zeros(0,2);
+    for K = 1:Kmax
+        for t = 1:K-1, ij = [ij; K t; t K]; end %#ok<AGROW>
+        ij = [ij; K K]; %#ok<AGROW>
+    end
 end
 
 function est = select2d(outs, nA, lab)

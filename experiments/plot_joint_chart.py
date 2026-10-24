@@ -7,7 +7,10 @@ users reached by both). Solid: joint t-SNE chart with real K x K training (K^2 s
 hybrids; dashed: searches. x axis: total sweeps.
   1_informed_prior          : informed K x K lists; hybrids and searches within the user clusters
   2_no_prior_coarse_to_fine : coarse-to-fine K x K lists; hybrids and searches over the full codebook
+Shell order (second argument 'shell'): the same pairs evaluated after every acquisition n = 1..64
+(the K x K grid grows by its new row and column one pair at a time); figures next to that summary.
 Usage: python experiments/plot_joint_chart.py results_aoa/serving_joint_chart/est_G60dB
+       python experiments/plot_joint_chart.py results_aoa/serving_joint_chart/est_G60dB/figures/shell_order shell
 """
 import csv, os, sys, time, collections
 import matplotlib
@@ -16,6 +19,7 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
 D = sys.argv[1]
+SHELL = len(sys.argv) > 2 and sys.argv[2] == 'shell'
 INK, MUTED, GRID = '#222220', '#6b6a63', '#e4e3dc'
 plt.rcParams.update({'font.size': 9, 'axes.edgecolor': MUTED, 'axes.labelcolor': INK, 'xtick.color': MUTED,
                      'ytick.color': MUTED, 'axes.spines.top': False, 'axes.spines.right': False, 'axes.grid': True,
@@ -27,11 +31,15 @@ XMAX = max(k[4] for t in T.values() for k in t)
 
 
 def series(tr, sfx, Kh):
+    if SHELL:                                                      # column K = acquisitions n
+        Kh, lab_h = Kh * Kh, f'{Kh * Kh} acq. (shell) + hierarchical'
+    else:
+        lab_h = f'K={Kh} ({Kh*Kh} acq.) + hierarchical'
     return [('joint t-SNE chart (LUT beam)',    tr, 'tsne',                    None, 0, '#2a78d6', 'o', '-', 2.0),
             ('+ 2 neighbours',                  tr, 'tsne+refine' + sfx,       None, 2, '#eb6834', 's', '-', 1.6),
             ('+ 4 neighbours',                  tr, 'tsne+refine' + sfx,       None, 4, '#1baf7a', '^', '-', 1.6),
             ('+ 6 neighbours',                  tr, 'tsne+refine' + sfx,       None, 6, '#eda100', 'D', '-', 1.6),
-            (f'K={Kh} ({Kh*Kh} acq.) + hierarchical', tr, 'tsne+hierarchical' + sfx, Kh, 0, '#e87ba4', 'v', '-', 1.6)]
+            (lab_h,                             tr, 'tsne+hierarchical' + sfx, Kh, 0, '#e87ba4', 'v', '-', 1.6)]
 
 
 VARIANTS = [
@@ -61,7 +69,7 @@ def curve(tab, tr, sc, Kf, R, met):
 
 
 for folder, vtitle, main, ser in VARIANTS:
-    out = os.path.join(D, 'figures', folder)
+    out = os.path.join(D, folder) if SHELL else os.path.join(D, 'figures', folder)
     os.makedirs(out, exist_ok=True)
     for surf, sname in SURF.items():
         if not any(k[0] == surf for k in T):
@@ -89,12 +97,14 @@ for folder, vtitle, main, ser in VARIANTS:
                 if c == 0:
                     a.set_ylabel(ylab)
                 if r == len(ROWS) - 1:
-                    a.set_xlabel('total sweeps (pure joint t-SNE at K^2 = 1, 4, 9, ...)')
-                a.set_xticks([1, 4, 9, 16, 25, 36, 49, 64, XMAX])
+                    a.set_xlabel('total sweeps (joint t-SNE: acquisitions in shell order)' if SHELL else
+                                 'total sweeps (pure joint t-SNE at K^2 = 1, 4, 9, ...)')
+                a.set_xticks([1, 8, 16, 24, 32, 40, 48, 56, 64, XMAX] if SHELL else [1, 4, 9, 16, 25, 36, 49, 64, XMAX])
         h = [Line2D([], [], color=col, marker=mk, ls=ls, lw=lw, label=lab) for lab, tr, sc, Kf, R, col, mk, ls, lw in ser]
         h.append(Line2D([], [], color='#2a78d6', ls=':', lw=1.4, label='joint t-SNE AoA estimate (angle rows)'))
         fig.legend(handles=h, loc='upper center', ncol=4, frameon=False, bbox_to_anchor=(0.5, 1.0), fontsize=9)
-        fig.suptitle(f'full-NLOS users, surface {sname}, joint 2-D t-SNE chart: {vtitle}', y=1.05, color=INK, fontsize=12)
+        fig.suptitle(f'full-NLOS users, surface {sname}, joint 2-D t-SNE chart{" (shell order)" if SHELL else ""}: {vtitle}',
+                     y=1.05, color=INK, fontsize=12)
         fig.tight_layout(rect=(0, 0, 1, 0.93))
         fn = f'fullNLOS_{surf}.png'
         for attempt in range(5):                                   # OneDrive may briefly lock the file
