@@ -129,5 +129,7 @@ for folder, vtitle, main, series in VARIANTS:
                     break
                 except OSError:
                     time.sleep(2)
+            else:
+                raise OSError('could not save ' + fn)
             plt.close(fig)
         print(folder)
