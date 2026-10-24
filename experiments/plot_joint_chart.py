@@ -9,6 +9,7 @@ hybrids; dashed: searches. x axis: total sweeps.
   2_no_prior_coarse_to_fine : coarse-to-fine K x K lists; hybrids and searches over the full codebook
 Shell order (second argument 'shell'): the same pairs evaluated after every acquisition n = 1..64
 (the K x K grid grows by its new row and column one pair at a time); figures next to that summary.
+Curves absent from a summary (e.g. t-SNE + verify in older runs) are simply not drawn.
 Usage: python experiments/plot_joint_chart.py results_aoa/serving_joint_chart/est_G60dB
        python experiments/plot_joint_chart.py results_aoa/serving_joint_chart/est_G60dB/figures/shell_order shell
 """
@@ -39,7 +40,8 @@ def series(tr, sfx, Kh):
             ('+ 2 neighbours',                  tr, 'tsne+refine' + sfx,       None, 2, '#eb6834', 's', '-', 1.6),
             ('+ 4 neighbours',                  tr, 'tsne+refine' + sfx,       None, 4, '#1baf7a', '^', '-', 1.6),
             ('+ 6 neighbours',                  tr, 'tsne+refine' + sfx,       None, 6, '#eda100', 'D', '-', 1.6),
-            (lab_h,                             tr, 'tsne+hierarchical' + sfx, Kh, 0, '#e87ba4', 'v', '-', 1.6)]
+            (lab_h,                             tr, 'tsne+hierarchical' + sfx, Kh, 0, '#e87ba4', 'v', '-', 1.6),
+            ('t-SNE + verify (proposed beam measured)', tr, 'tsne+verify',  None, 0, '#184f95', '*', '-.', 1.8)]
 
 
 VARIANTS = [
@@ -99,7 +101,7 @@ for folder, vtitle, main, ser in VARIANTS:
                 if r == len(ROWS) - 1:
                     a.set_xlabel('total sweeps (joint t-SNE: acquisitions in shell order)' if SHELL else
                                  'total sweeps (pure joint t-SNE at K^2 = 1, 4, 9, ...)')
-                a.set_xticks([1, 8, 16, 24, 32, 40, 48, 56, 64, XMAX] if SHELL else [1, 4, 9, 16, 25, 36, 49, 64, XMAX])
+                a.set_xticks(([1] + list(range(16, XMAX + 1, 16))) if SHELL else [1, 4, 9, 16, 25, 36, 49, 64, XMAX])
         h = [Line2D([], [], color=col, marker=mk, ls=ls, lw=lw, label=lab) for lab, tr, sc, Kf, R, col, mk, ls, lw in ser]
         h.append(Line2D([], [], color='#2a78d6', ls=':', lw=1.4, label='joint t-SNE AoA estimate (angle rows)'))
         fig.legend(handles=h, loc='upper center', ncol=4, frameon=False, bbox_to_anchor=(0.5, 1.0), fontsize=9)

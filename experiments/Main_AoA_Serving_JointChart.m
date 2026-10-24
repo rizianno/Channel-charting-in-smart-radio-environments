@@ -20,7 +20,12 @@
 % shell order (the (K-1) x (K-1) grid grows to K x K by adding (K,1), (1,K), (K,2), (2,K), ..., (K,K)),
 % so n = K^2 reproduces the K x K grid and both EMSs get new codewords at the same rate. Results in
 % results_aoa/serving_joint_chart/<noise>/figures/shell_order/ (column K = n acquisitions).
-% Environment: SJC_ORDER (grid | shell), SJC_SIZES ("60r,60,120,180,240"), SJC_KS ("1:8"), SJC_RS ("2,4,6"), SJC_BMAX (16,
+% SJC_USERS = both: the chart (and every score, searches included) uses only the users reached by
+% BOTH EMSs, so no user carries a second label its channel says nothing about (default any).
+% SJC_VERIFY = 1 (shell order): 't-SNE + verify': after each acquisition the beam of the newly
+% selected estimate is also measured (per EMS, same slot) and the stronger of it and the current
+% beam is kept: monotone SNR, 2n sweeps after n acquisitions. SJC_OUTSUB: output subfolder.
+% Environment: SJC_ORDER (grid | shell), SJC_USERS (any | both), SJC_VERIFY (0), SJC_OUTSUB (shell_order), SJC_SIZES ("60r,60,120,180,240"), SJC_KS ("1:8"), SJC_RS ("2,4,6"), SJC_BMAX (16,
 %   hierarchical sweeps after training), SJC_FOOT (0.15), SJC_NOISE (est_G60dB), SJC_WORKERS (40)
 % Outputs: results_aoa/serving_joint_chart/<noise>/summary.csv
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -40,6 +45,8 @@ Bmax  = str2double(envs('SJC_BMAX','16'));
 foot  = str2double(envs('SJC_FOOT','0.15'));
 nW    = str2double(envs('SJC_WORKERS','40'));
 order = envs('SJC_ORDER','grid');
+usersMode = envs('SJC_USERS','any');
+verify = str2double(envs('SJC_VERIFY','0'));
 Smax  = Kmax^2 + max([Rs + 1, Bmax]);                           % searches up to the longest hybrid
 k0 = 2*pi/(3e8/30e9);  d = (3e8/30e9)/2;
 
@@ -53,7 +60,9 @@ popU = find(~U.has_direct);  nU = numel(popU);                  % full NLOS (ord
 reach = [any(Data.H_I_RIS1(popU,:,:) ~= 0, [2 3]), any(Data.H_I_RIS2(popU,:,:) ~= 0, [2 3])] & U.front(popU,:);
 Hd  = reshape(permute(double(Data.H_LOS_1bounce(popU,:,:)),[2 3 1]), Nb*Nr, nU);   % zero for full NLOS
 xyz = [U.xy(popU,:), params.UE_height*ones(nU,1)];
-cu  = find(any(reach,2));  nC = numel(cu);                      % chart users: reached by at least one EMS
+if strcmp(usersMode,'both'), cu = find(all(reach,2)); else, cu = find(any(reach,2)); end   % chart users
+nC  = numel(cu);  inC = false(nU,1);  inC(cu) = true;
+if verify, Smax = max(Smax, 2*Kmax^2); end                      % searches as long as t-SNE + verify
 nA  = round(params.Supervision_percentage * nC);
 azTrue = U.az(popU,:);
 lab = asind(sind(azTrue(cu,:)));                                % 2-D labels (front users: = azimuth)
@@ -65,7 +74,7 @@ fprintf('Joint chart: %d full-NLOS users reached by an EMS (EMS1 %d, EMS2 %d, bo
 
 pool = [];                                                      % started only if a chart is missing
 outDir = fullfile(root,'results_aoa','serving_joint_chart', nz.name);
-if strcmp(order,'shell'), outDir = fullfile(outDir, 'figures', 'shell_order'); end
+if strcmp(order,'shell'), outDir = fullfile(outDir, 'figures', envs('SJC_OUTSUB','shell_order')); end
 if ~exist(outDir,'dir'), mkdir(outDir); end
 rows = {};
 for sz = sizes
@@ -89,7 +98,7 @@ for sz = sizes
     % ---- joint charts for every pair of both K x K grids (cached per pair)
     P = zeros(0,2);
     for tr = {'c2f','informed'}, [ga, gb] = ndgrid(lists.(tr{1}){1}, lists.(tr{1}){2}); P = [P; ga(:) gb(:)]; end %#ok<AGROW>
-    cf = fullfile(root,'cache_ablations', sprintf('jointchart_%s_%s.mat', nz.name, tag));
+    cf = fullfile(root,'cache_ablations', sprintf('jointchart%s_%s_%s.mat', repmat('_both', 1, strcmp(usersMode,'both')), nz.name, tag));
     Rj = load_cache(cf);  P = unique(P,'rows','stable');
     if ~all(arrayfun(@(q) isKey(Rj, sprintf('%d_%d', P(q,:))), 1:size(P,1)))
         if isempty(pool), pool = gcp('nocreate'); if isempty(pool), pool = parpool('Processes', nW); end, end
@@ -103,9 +112,9 @@ for sz = sizes
     snrE = @(e, i) rho * lmax(Hd + pick(A{e}, i));
     snrJ = @(i1, i2) rho * lmax(Hd + pick(A{1}, i1) + pick(A{2}, i2));
     exh = {best1(G{1}, repmat(1:N, nU, 1)), best1(G{2}, repmat(1:N, nU, 1))};
-    mE = {reach(:,1) & ~isAnch & snrE(1, exh{1}).' > 0, reach(:,2) & ~isAnch & snrE(2, exh{2}).' > 0};
+    mE = {reach(:,1) & inC & ~isAnch & snrE(1, exh{1}).' > 0, reach(:,2) & inC & ~isAnch & snrE(2, exh{2}).' > 0};
     mB = mE{1} & mE{2};                                         % pair metrics: users reached by both
-    mJ = any(reach,2) & ~isAnch;
+    mJ = inC & ~isAnch;
     berr = @(e, i) beam_err(ub{e}(i(:)).', azTrue(:,e), wu/2);
     hdr = {tag, M, N};
     function_rows = @(train, scheme, K, R, s, i1, i2, az) eval_rows(hdr, train, scheme, K, R, s, i1, i2, az, ...
@@ -129,6 +138,7 @@ for sz = sizes
     % ---- t-SNE joint chart, K x K training, per-user selection; hybrids per EMS
     if strcmp(order,'shell'), steps = 1:Kmax^2; else, steps = Ks; end
     for tr = {'c2f','informed'}
+        bv = {};                                                    % t-SNE + verify: current beams
         for K = steps
             if strcmp(order,'shell')                                % first K acquisitions of the shell order
                 ij = shell_order(Kmax);  Pk = [lists.(tr{1}){1}(ij(1:K,1)).', lists.(tr{1}){2}(ij(1:K,2)).'];
@@ -144,6 +154,16 @@ for sz = sizes
             lpos = cell(1,2);
             for e = 1:2, [~, lpos{e}] = min(abs(ub{e}(lut(:,e)).' - ub{e}(Sup{e})), [], 2); end
             rows = [rows; function_rows(tr{1}, 'tsne', K, 0, nAcq, lut(:,1), lut(:,2), az)]; %#ok<AGROW>
+            if verify && strcmp(order,'shell')                     % measure the proposed beam, keep the stronger
+                if isempty(bv), bv = {lut(:,1), lut(:,2)};
+                else
+                    for e = 1:2
+                        better = G{e}((lut(:,e)-1)*nU + (1:nU).') > G{e}((bv{e}-1)*nU + (1:nU).');
+                        bv{e}(better) = lut(better,e);
+                    end
+                end
+                rows = [rows; function_rows(tr{1}, 'tsne+verify', K, 0, 2*nAcq, bv{1}, bv{2}, az)]; %#ok<AGROW>
+            end
             for R = Rs
                 rows = [rows; function_rows(tr{1}, 'tsne+refine', K, R, nAcq + R + 1, ...
                     best1(G{1}, nbr(lut(:,1), R, N)), best1(G{2}, nbr(lut(:,2), R, N)), az)]; %#ok<AGROW>
